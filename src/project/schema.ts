@@ -23,7 +23,8 @@ export const orders = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     connectionId: uuid("connection_id"),
-    paypalOrderId: text("paypal_order_id").notNull().unique(),
+    /** Null while status is CREATING (row is written before PayPal is called). */
+    paypalOrderId: text("paypal_order_id").unique(),
     status: text("status").notNull(),
     currency: text("currency").notNull(),
     totalCents: integer("total_cents").notNull(),
