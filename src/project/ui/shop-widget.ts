@@ -269,7 +269,7 @@ function safeImageUrl(url) {
 
 function image(url, className, alt) {
   const src = safeImageUrl(url);
-  if (!src) return el("div", { class: "placeholder", "aria-hidden": "true", text: "\u{1F6CD}" });
+  if (!src) return className === "thumb" ? el("div", { class: "thumb", "aria-hidden": "true" }) : el("div", { class: "placeholder", "aria-hidden": "true", text: "\u{1F6CD}" });
   const img = el("img", { src: src, alt: alt || "", loading: "lazy", referrerpolicy: "no-referrer", decoding: "async", class: className });
   img.addEventListener("error", function () {
     const fallback = el("div", { class: className === "thumb" ? "thumb" : "placeholder", "aria-hidden": "true", text: className === "thumb" ? "" : "\u{1F6CD}" });
