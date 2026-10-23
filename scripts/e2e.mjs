@@ -84,7 +84,7 @@ const tokens = await r.json();
 ok(r.status === 200 && tokens.access_token && tokens.refresh_token, "tokens issued");
 
 let m = await mcp(tokens.access_token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "1" } });
-ok(m.status === 200 && m.body.result.serverInfo.name === "agenthuman-ux", "initialize");
+ok(m.status === 200 && m.body.result.serverInfo.name === "payout", "initialize");
 const icon = m.body.result.serverInfo.icons?.[0];
 ok(m.body.result.serverInfo.title && icon?.src.endsWith("/favicon.svg"), "serverInfo carries brand title + icon");
 m = await mcp(tokens.access_token, "tools/list", {});

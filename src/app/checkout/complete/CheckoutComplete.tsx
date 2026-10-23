@@ -14,11 +14,11 @@ type PublicOrder = Pick<Order, "id" | "status" | "totalCents" | "currency" | "it
 type State = { status: "loading" } | { status: "missing" } | { status: "error"; message: string } | { status: "ready"; order: PublicOrder };
 
 const ERRORS: Record<string, string> = {
-  capture_failed: "PayPal approved the payment but we couldn't capture it. You have not been charged.",
-  payment_declined: "PayPal declined the payment. Try again with a different funding source.",
-  instrument_declined: "PayPal declined the payment method. Try again with a different funding source.",
+  not_approved: "PayPal hasn't confirmed your approval yet. Open PayPal again from Claude, or check the order in your dashboard.",
+  cancelled: "This checkout was cancelled, so you have not been charged. Ask Claude to start a new one.",
+  paypal_error: "PayPal couldn't complete the payment. You have not been charged. Try again from Claude.",
+  paypal_not_configured: "Payments aren't set up on this server yet (missing PayPal sandbox credentials).",
   order_not_found: "We couldn't find this order.",
-  expired: "This checkout expired. Ask Claude to start a new one.",
 };
 
 function errorMessage(code: string) {
