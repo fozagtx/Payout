@@ -71,8 +71,8 @@ export function OrdersCard() {
               const first = items[0];
               return (
                 <li key={order.id} className="px-5 py-4 sm:px-6">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="flex -space-x-3">
                         {items.slice(0, 3).map((item, i) => (
                           <Thumb key={`${item.productId}-${i}`} src={item.imageUrl} alt={item.title} className="h-11 w-11 ring-2 ring-white dark:ring-slate-900" />
@@ -84,14 +84,14 @@ export function OrdersCard() {
                           {first ? first.title : "Order"}
                           {items.length > 1 ? <span className="font-normal text-slate-500"> + {items.length - 1} more</span> : null}
                         </p>
-                        <p className="truncate text-xs text-slate-500">
+                        <p className="line-clamp-2 text-xs text-slate-500">
                           {count} {count === 1 ? "item" : "items"}
                           {first?.merchant ? ` · ${first.merchant}` : ""}
                           {order.createdAt ? ` · ${formatDate(order.createdAt)}` : ""}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-3">
                       <div className="text-right">
                         <p className="text-sm font-bold text-slate-900 dark:text-white">{formatMoney(order.totalCents, order.currency)}</p>
                         <div className="mt-0.5">

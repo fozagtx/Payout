@@ -103,15 +103,15 @@ export function Dashboard() {
               </p>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-              <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+              <div className="min-w-0 space-y-6">
                 <ConnectCard
                   mcpUrl={connections.status === "ready" ? connections.mcpUrl : null}
                   connected={connections.status === "ready" && connections.connections.length > 0}
                 />
                 <OrdersCard />
               </div>
-              <div className="space-y-6">
+              <div className="min-w-0 space-y-6">
                 <ConnectionsCard state={connections} reload={loadConnections} />
                 <PayPalCard user={user} onChange={(paypalEmail) => setUser({ ...user, paypalEmail })} />
               </div>
