@@ -1,6 +1,7 @@
 // End-to-end check of what web AI chat clients do against this server:
 // discover → register (DCR) or identify by URL (CIMD) → authorize → consent → token → /mcp.
-// Needs the server running with DEV_LOGIN=true (dev login + loopback CIMD).
+// Needs the server running locally (PUBLIC_API_URL=http://localhost:4000 enables loopback CIMD).
+// Without CHANNEL3_API_KEY the demo catalog is used, so search works offline.
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 
@@ -24,13 +25,15 @@ ok(asm.code_challenge_methods_supported.includes("S256") && asm.registration_end
 ok(asm.client_id_metadata_document_supported === true && asm.token_endpoint_auth_methods_supported.includes("none"), "AS metadata: CIMD + public clients (ChatGPT, Claude)");
 ok(asm.authorization_response_iss_parameter_supported === true && prm.authorization_servers[0] === asm.issuer, "AS metadata: RFC 9207 iss, issuer matches PRM");
 
-// ── Sign in once (dev login) ─────────────────────────────────────────────────
-r = await fetch(`${base}/login`, form({ email: "test@example.com", next: "/" }));
+// ── Create an account (username + password) ──────────────────────────────────
+const json = (body) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const username = `e2e_${randomBytes(4).toString("hex")}`;
+r = await fetch(`${base}/api/auth/signup`, json({ username, password: "password123" }));
 const cookie = r.headers.get("set-cookie").split(";")[0];
-ok(r.status === 303 && cookie.startsWith("mcp_session="), "dev login sets session cookie");
+ok(r.status === 201 && cookie.startsWith("mcp_session="), "signup sets session cookie");
 
 /** Runs /authorize → /connect → Allow. Returns the redirect back to the client. */
-async function authorize({ clientId, redirectUri, scope = "notes:read notes:write", resource = `${base}/mcp`, decision = "allow" }) {
+async function authorize({ clientId, redirectUri, scope = "shop:browse shop:checkout orders:read", resource = `${base}/mcp`, decision = "allow" }) {
   const { verifier, challenge } = pkce();
   const url = new URL(asm.authorization_endpoint);
   const params = { response_type: "code", client_id: clientId, redirect_uri: redirectUri, code_challenge: challenge, code_challenge_method: "S256", state: "xyz", scope };
@@ -65,7 +68,7 @@ const dcr = await r.json();
 ok(r.status === 201 && dcr.client_id, "DCR: client registered");
 
 let a = await authorize({ clientId: dcr.client_id, redirectUri: claudeRedirect });
-ok(a.html.includes("Connect Claude") && a.html.includes("Read your notes"), "consent page shows client + scopes");
+ok(a.html.includes("Connect Claude") && a.html.includes("Search products and show them to you"), "consent page shows client + scopes");
 ok(a.html.includes("isn't verified") && a.html.includes("claude.ai"), "consent page: DCR name marked unverified, shows redirect host");
 ok(a.page.headers.get("x-frame-options") === "DENY" && /frame-ancestors 'none'/.test(a.page.headers.get("content-security-policy")), "consent page refuses framing");
 ok(a.html.includes('rel="icon" href="/favicon.ico"'), "consent page links favicon");
@@ -86,16 +89,19 @@ const icon = m.body.result.serverInfo.icons?.[0];
 ok(m.body.result.serverInfo.title && icon?.src.endsWith("/favicon.svg"), "serverInfo carries brand title + icon");
 m = await mcp(tokens.access_token, "tools/list", {});
 const tools = m.body.result.tools;
-ok(tools.map((t) => t.name).sort().join(",") === "create_note,delete_note,get_activity,list_notes,whoami", "tools/list");
+ok(tools.map((t) => t.name).sort().join(",") === "create_checkout,get_activity,get_order_status,get_product,list_orders,search_products,whoami", "tools/list");
+ok(tools.find((t) => t.name === "search_products")._meta?.ui?.resourceUri === "ui://payout/shop.html", "search_products renders the shop canvas");
 const whoamiTool = tools.find((t) => t.name === "whoami");
 ok(whoamiTool._meta?.["openai/profile"] === true && whoamiTool.outputSchema?.additionalProperties === false, "whoami is a ChatGPT profile tool");
-m = await mcp(tokens.access_token, "tools/call", { name: "create_note", arguments: { title: "Hello", body: "from e2e" } });
-ok(!m.body.result.isError && m.body.result.structuredContent.note.id, "create_note");
-m = await mcp(tokens.access_token, "tools/call", { name: "list_notes", arguments: {} });
-ok(m.body.result.structuredContent.notes[0].title === "Hello", "list_notes returns it");
+m = await mcp(tokens.access_token, "resources/read", { uri: "ui://payout/shop.html" });
+ok(m.body.result.contents[0].mimeType === "text/html;profile=mcp-app", "shop canvas resource is an MCP App");
+m = await mcp(tokens.access_token, "tools/call", { name: "search_products", arguments: { query: "shoes" } });
+ok(!m.body.result.isError && Array.isArray(m.body.result.structuredContent.products), "search_products");
+m = await mcp(tokens.access_token, "tools/call", { name: "list_orders", arguments: {} });
+ok(Array.isArray(m.body.result.structuredContent.orders), "list_orders");
 m = await mcp(tokens.access_token, "tools/call", { name: "whoami", arguments: {} });
 const profile = m.body.result.structuredContent;
-ok(profile.id && profile.email === "test@example.com" && Object.keys(profile).every((k) => ["id", "email"].includes(k)), "whoami returns stable id + email only");
+ok(profile.id && profile.username === username && Object.keys(profile).every((k) => ["id", "username"].includes(k)), "whoami returns stable id + username only");
 
 r = await token({ client_id: dcr.client_id, grant_type: "refresh_token", refresh_token: tokens.refresh_token });
 const rotated = await r.json();
@@ -142,8 +148,8 @@ for (const connectionId of connectionIds) {
 }
 ok((await mcp(fresh.access_token, "tools/list", {})).status === 401, "Disconnect revokes access immediately");
 
-r = await fetch(`${base}/login`, form({ email: "x@example.com", next: "/\\evil.example" }));
-ok(r.headers.get("location") === "/", "login `next` can't redirect off-site (/\\evil)");
+r = await fetch(`${base}/api/auth/login`, json({ username, password: "password123", next: "/\\evil.example" }));
+ok((await r.json()).next === "/", "login `next` can't redirect off-site (/\\evil)");
 
 // ── Edge cases every client can hit ──────────────────────────────────────────
 a = await authorize({ clientId: dcr.client_id, redirectUri: claudeRedirect, resource: null });
