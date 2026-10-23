@@ -78,4 +78,6 @@ export interface Services {
   payments: Payments;
   /** Public origin, for PayPal return/cancel URLs. */
   publicUrl: string;
+  /** Signs image proxy URLs (/img). When unset, the proxy isn't mounted and images are passed through. */
+  imageSecret?: string;
 }

@@ -5,6 +5,7 @@ import type { Database } from "./db/client.js";
 import { createMcpKit } from "./mcp-kit/index.js";
 import { createAuthRouter } from "./project/api/auth.js";
 import { createConnectionsRouter } from "./project/api/connections.js";
+import { createImageRouter } from "./project/api/images.js";
 import { createShopRouter } from "./project/api/shop.js";
 import { BRANDING } from "./project/branding.js";
 import { SCOPES } from "./project/scopes.js";
@@ -43,6 +44,7 @@ export function createApp(db: Database, config: Config, services: Services) {
   app.use(createAuthRouter(db, session));
   app.use(createConnectionsRouter(session, mcp.provider, config.apiUrl));
   app.use(createShopRouter(db, session, services));
+  if (services.imageSecret) app.use(createImageRouter(services.imageSecret));
 
   app.get("/health", async (_request, response, next) => {
     try {

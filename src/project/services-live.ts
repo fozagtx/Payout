@@ -13,5 +13,6 @@ export function createLiveServices(config: Config): Services {
       baseUrl: config.paypal.baseUrl,
     }),
     publicUrl: config.apiUrl,
+    imageSecret: config.sessionSecret,
   };
 }

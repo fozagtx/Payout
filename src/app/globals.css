@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+@theme {
+  --color-navy: #003087;
+  --color-navy-900: #001c54;
+  --color-brand: #0070e0;
+  --color-brand-600: #005ec2;
+  --color-sky: #e8f2ff;
+  --color-paypal: #ffc439;
+  --color-paypal-600: #f2b52a;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  min-height: 100dvh;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand) 25%, transparent);
+}
+
+@keyframes payout-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise {
+  animation: payout-rise 0.5s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise { animation: none; }
+}

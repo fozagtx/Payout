@@ -53,6 +53,7 @@ export async function startServer(services: Partial<Omit<Services, "publicUrl">>
     catalog: services.catalog ?? unusedCatalog,
     payments: services.payments ?? unusedPayments,
     publicUrl: baseUrl,
+    ...(services.imageSecret ? { imageSecret: services.imageSecret } : {}),
   });
   app.use(errorHandler);
   server.on("request", app);
