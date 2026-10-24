@@ -7,8 +7,6 @@ import { Card, CardBody, CardHeader } from "@/components/Card.js";
 import { CheckIcon, PayPalMark } from "@/components/Icons.js";
 import { Pill } from "@/components/StatusPill.js";
 
-const PAYPAL_MCP = "https://mcp.sandbox.paypal.com/http";
-
 export function PayPalCard({ user, onChange }: { user: User; onChange: (email: string | null) => void }) {
   const id = useId();
   const [editing, setEditing] = useState(!user.paypalEmail);
@@ -114,13 +112,9 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
           </p>
         ) : null}
 
-        <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/50 dark:text-slate-400">
-          <strong className="font-semibold text-slate-800 dark:text-slate-200">Tip:</strong> add PayPal’s own MCP server in Claude too,
-          for invoices and refunds:{" "}
-          <code className="break-all rounded bg-white px-1 py-0.5 font-mono text-[11px] text-navy dark:bg-slate-900 dark:text-sky-300">
-            {PAYPAL_MCP}
-          </code>
-        </div>
+        <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600 dark:bg-slate-800/50 dark:text-slate-400">
+          You don’t need to add a PayPal connector in Claude. Payout creates the order, and you approve every payment on PayPal.
+        </p>
       </CardBody>
     </Card>
   );

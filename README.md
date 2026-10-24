@@ -63,8 +63,9 @@ Built for the [PayPal AI Hackathon](https://paypal-ai.devpost.com/).
   the dashboard to pre-fill the PayPal login (`payment_source.paypal.email_address`).
 - Money only moves after you approve on PayPal. Checkout has its own OAuth
   scope (`shop:checkout`).
-- You can also add PayPal's own MCP server (`https://mcp.sandbox.paypal.com/http`)
-  in Claude next to Payout, for invoices and refunds.
+- Shoppers connect only Payout in Claude. PayPal's own MCP server and Agent
+  Toolkit act on the *merchant's* PayPal account (invoices, refunds, disputes),
+  so they are not something a buyer should add.
 
 ## Run it
 
