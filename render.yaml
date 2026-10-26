@@ -6,8 +6,8 @@ services:
     name: payout
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    startCommand: pnpm db:migrate && pnpm start
+    buildCommand: npx -y pnpm@11.21.0 install --frozen-lockfile && npx -y pnpm@11.21.0 build
+    startCommand: npm run db:migrate && npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
