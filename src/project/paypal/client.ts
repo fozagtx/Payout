@@ -76,7 +76,7 @@ type PayPalDispute = {
   update_time?: string;
 };
 
-function centsFromPayPal(value: string | undefined) {
+export function centsFromPayPal(value: string | undefined) {
   if (!value || !/^\d+(?:\.\d+)?$/.test(value)) throw new Error("invalid PayPal dispute amount");
   const [whole, fraction = ""] = value.split(".");
   const cents = Number(whole) * 100 + Number((fraction + "00").slice(0, 2)) + (Number(fraction[2] ?? "0") >= 5 ? 1 : 0);
@@ -256,16 +256,25 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
       }
     },
 
-    async refundCapture(captureId: string, requestId: string) {
+    async refundCapture(captureId: string, requestId: string, options: { amountCents?: number; currency?: string; noteToPayer?: string } = {}) {
       credentials();
-      const body = await api<{ id?: string; status?: string }>(
+      const body = await api<{ id?: string; status?: string; amount?: { value?: string } }>(
         "POST",
         `/v2/payments/captures/${encodeURIComponent(captureId)}/refund`,
-        {},
+        {
+          ...(options.amountCents !== undefined
+            ? { amount: { value: formatCents(options.amountCents), currency_code: (options.currency ?? "USD").toUpperCase() } }
+            : {}),
+          ...(options.noteToPayer ? { note_to_payer: options.noteToPayer } : {}),
+        },
         requestId
       );
       if (!body.id) throw new PayPalApiError(200, "invalid_refund_response");
-      return { refundId: body.id, status: body.status ?? "COMPLETED" };
+      return {
+        refundId: body.id,
+        status: body.status ?? "COMPLETED",
+        ...(body.amount?.value !== undefined ? { cents: centsFromPayPal(body.amount.value) } : {}),
+      };
     },
 
     async listDisputes() {

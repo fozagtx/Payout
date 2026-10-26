@@ -101,7 +101,7 @@ describe("GET /api/orders", () => {
     expect(body.orders.length).toBeGreaterThanOrEqual(5);
     const first = body.orders[0];
     expect(Object.keys(first).sort()).toEqual(
-      ["approveUrl", "createdAt", "currency", "dispute", "id", "items", "paypalOrderId", "shipping", "status", "totalCents"]
+      ["approveUrl", "createdAt", "currency", "dispute", "id", "items", "paypalOrderId", "refundedCents", "refunds", "shipping", "status", "totalCents"]
     );
     const times = body.orders.map((o: any) => Date.parse(o.createdAt));
     expect([...times].sort((x: number, y: number) => y - x)).toEqual(times);
@@ -150,21 +150,88 @@ describe("shipping, refunds and webhooks", () => {
     expect(pub.order).not.toHaveProperty("shipping");
   });
 
-  it("refunds a paid order once, and only for its owner", async () => {
+  it("fully refunds a paid order with its reason, and only for its owner", async () => {
     const order = await paidOrder();
     expect((await post(`/api/orders/${order.id}/refund`, {})).status).toBe(401);
     expect((await post(`/api/orders/${order.id}/refund`, {}, { cookie: bob.cookie })).status).toBe(404);
-    const response = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    const response = await post(`/api/orders/${order.id}/refund`, { reason: "changed_mind" }, { cookie: alice.cookie });
     expect(response.status).toBe(200);
-    expect((await response.json()).order.status).toBe("REFUNDED");
-    const again = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
-    expect((await again.json()).order.status).toBe("REFUNDED");
-    expect(paypal.calls.filter((c) => c.startsWith("refund:")).at(-1)).toBe(`refund:CAP-${order.paypalOrderId}:refund-${order.id}`);
+    const body = await response.json();
+    expect(body.order).toMatchObject({
+      status: "REFUNDED",
+      refundedCents: 4999,
+      refunds: [{ cents: 4999, reason: "changed_mind", note: null }],
+    });
+    expect(paypal.refundArgs.at(-1)).toEqual({
+      captureId: `CAP-${order.paypalOrderId}`,
+      requestId: `refund-${order.id}-0-4999`,
+      options: undefined,
+    });
+    const again = await post(`/api/orders/${order.id}/refund`, { reason: "other" }, { cookie: alice.cookie });
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toBe("not_refundable");
+  });
+
+  it("partially refunds, rejects more than the remaining amount, then refunds the rest", async () => {
+    const order = await paidOrder();
+    const partial = await post(
+      `/api/orders/${order.id}/refund`,
+      { amountCents: 1000, reason: "damaged_or_defective", note: "Thanks for your patience." },
+      { cookie: alice.cookie }
+    );
+    expect(partial.status).toBe(200);
+    expect((await partial.json()).order).toMatchObject({
+      status: "PARTIALLY_REFUNDED",
+      refundedCents: 1000,
+      refunds: [{ cents: 1000, reason: "damaged_or_defective", note: "Thanks for your patience." }],
+    });
+    const orderStatus = await callTool(server.baseUrl, alice.token, "get_order_status", { order_id: order.id });
+    expect(orderStatus.data.order).toMatchObject({ status: "PARTIALLY_REFUNDED", refundedCents: 1000 });
+    expect(orderStatus.raw.content[0].text).toContain("Partial refund");
+    expect(paypal.refundArgs.at(-1)).toMatchObject({
+      captureId: `CAP-${order.paypalOrderId}`,
+      requestId: `refund-${order.id}-0-1000`,
+      options: { amountCents: 1000, currency: "USD", noteToPayer: "Thanks for your patience." },
+    });
+
+    const tooMuch = await post(
+      `/api/orders/${order.id}/refund`,
+      { amountCents: 4000, reason: "other" },
+      { cookie: alice.cookie }
+    );
+    expect(tooMuch.status).toBe(409);
+    expect((await tooMuch.json()).error).toBe("invalid_amount");
+
+    const rest = await post(
+      `/api/orders/${order.id}/refund`,
+      { amountCents: 3999, reason: "changed_mind" },
+      { cookie: alice.cookie }
+    );
+    expect(rest.status).toBe(200);
+    expect((await rest.json()).order).toMatchObject({ status: "REFUNDED", refundedCents: 4999 });
+    expect(paypal.refundArgs.at(-1)).toMatchObject({
+      requestId: `refund-${order.id}-1000-3999`,
+      options: undefined,
+    });
+  });
+
+  it("validates the refund reason and buyer note", async () => {
+    const order = await paidOrder();
+    const missingReason = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    expect(missingReason.status).toBe(400);
+    expect((await missingReason.json()).error).toBe("invalid_request");
+    const longNote = await post(
+      `/api/orders/${order.id}/refund`,
+      { reason: "other", note: "x".repeat(256) },
+      { cookie: alice.cookie }
+    );
+    expect(longNote.status).toBe(400);
+    expect((await longNote.json()).error).toBe("invalid_request");
   });
 
   it("won't refund an unpaid order", async () => {
     const order = await newOrder();
-    const response = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    const response = await post(`/api/orders/${order.id}/refund`, { reason: "other" }, { cookie: alice.cookie });
     expect(response.status).toBe(409);
     expect((await response.json()).error).toBe("not_refundable");
   });
@@ -192,6 +259,45 @@ describe("shipping, refunds and webhooks", () => {
     expect((await post("/paypal/webhook", refund, valid)).status).toBe(200);
     [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
     expect(row).toMatchObject({ status: "REFUNDED", refundId: "REF9" });
+  });
+
+  it("deduplicates a refund webhook for our refund and records new partial PayPal refunds", async () => {
+    const order = await paidOrder();
+    const result = await post(
+      `/api/orders/${order.id}/refund`,
+      { amountCents: 1000, reason: "other" },
+      { cookie: alice.cookie }
+    );
+    expect(result.status).toBe(200);
+    const ownRefund = (await result.json()).order.refunds[0];
+    const [paidRow] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    const valid = { "paypal-transmission-sig": "valid" };
+    const webhook = (id: string, value: string, note?: string) => ({
+      event_type: "PAYMENT.CAPTURE.REFUNDED",
+      resource: {
+        id,
+        amount: { value, currency_code: "USD" },
+        ...(note ? { note_to_payer: note } : {}),
+        links: [{ rel: "up", href: `https://api.sandbox.paypal.com/v2/payments/captures/${paidRow!.captureId}` }],
+      },
+    });
+
+    expect((await post("/paypal/webhook", webhook(ownRefund.id, "10.00"), valid)).status).toBe(200);
+    let [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({ status: "PARTIALLY_REFUNDED", refunds: [{ id: ownRefund.id, cents: 1000 }] });
+    expect(row!.refunds).toHaveLength(1);
+
+    expect((await post("/paypal/webhook", webhook("REF-WEBHOOK-2", "5.00", "Second refund"), valid)).status).toBe(200);
+    [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({
+      status: "PARTIALLY_REFUNDED",
+      refundId: "REF-WEBHOOK-2",
+      refunds: [
+        { id: ownRefund.id, cents: 1000 },
+        { id: "REF-WEBHOOK-2", cents: 500, reason: null, note: "Second refund" },
+      ],
+    });
+    expect(row!.refunds.reduce((sum, refund) => sum + refund.cents, 0)).toBe(1500);
   });
 
   it("returns and persists only disputes tied to this user's captures", async () => {

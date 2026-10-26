@@ -38,6 +38,10 @@ function statusText(order: OrderView) {
   switch (order.status) {
     case "COMPLETED":
       return `Payment completed: ${total} was captured through PayPal.`;
+    case "PARTIALLY_REFUNDED":
+      return `Partial refund: ${money(order.refundedCents, order.currency)} of ${total} was refunded through PayPal.`;
+    case "REFUNDED":
+      return `Full refund: ${total} was refunded through PayPal.`;
     case "CANCELLED":
       return "The buyer cancelled this checkout on PayPal. No money moved.";
     case "FAILED":

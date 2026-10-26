@@ -26,6 +26,8 @@ export function orderStatus(status: string): { label: string; tone: Tone; payabl
       return { label: "Approved", tone: "blue", payable: false };
     case "COMPLETED":
       return { label: "Paid", tone: "green", payable: false };
+    case "PARTIALLY_REFUNDED":
+      return { label: "Partially refunded", tone: "amber", payable: false };
     case "REFUNDED":
       return { label: "Refunded", tone: "slate", payable: false };
     case "CANCELLED":
