@@ -1,11 +1,12 @@
 import { readdir, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { createDatabase, DB_SCHEMA, type DatabasePool } from "./client.js";
+import type { Pool } from "pg";
+import { createDatabase, DB_SCHEMA } from "./client.js";
 
 const directory = new URL("../../migrations/", import.meta.url);
 
 /** Applies migrations/*.sql in order, skipping ones already applied. */
-export async function runMigrations(pool: DatabasePool, log: (line: string) => void = console.log) {
+export async function runMigrations(pool: Pool, log: (line: string) => void = console.log) {
   const connection = await pool.connect();
   try {
     await connection.query(`CREATE SCHEMA IF NOT EXISTS ${DB_SCHEMA}`);
@@ -18,7 +19,7 @@ export async function runMigrations(pool: DatabasePool, log: (line: string) => v
     const files = (await readdir(directory)).filter((name) => name.endsWith(".sql")).sort();
     for (const name of files) {
       const applied = await connection.query("SELECT 1 FROM schema_migrations WHERE name = $1", [name]);
-      if (applied.rows.length) continue;
+      if (applied.rowCount) continue;
       await connection.query("BEGIN");
       try {
         await connection.query(await readFile(new URL(name, directory), "utf8"));
