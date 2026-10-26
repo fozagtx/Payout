@@ -87,8 +87,9 @@ pnpm dev                        # http://localhost:4000
   Pay with one of your sandbox *personal* accounts.
 
 Production: `pnpm build && pnpm start`. To deploy on Render, use the included
-`render.yaml` (a web service plus Postgres; it sets `PUBLIC_API_URL` from
-`RENDER_EXTERNAL_URL`).
+`render.yaml` (a web service; it sets `PUBLIC_API_URL` from
+`RENDER_EXTERNAL_URL`). Render prompts for `DATABASE_URL`: paste the URL of an
+existing Postgres (Render's free plan allows only one free database per account).
 
 ### Connect it to Claude
 

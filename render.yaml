@@ -1,4 +1,6 @@
-# One-click deploy on Render: a Node web service + Postgres.
+# One-click deploy on Render: a Node web service.
+# Render's free plan allows one free Postgres per account, so DATABASE_URL is pasted in
+# (an existing Render Postgres with a `payout` database, or any hosted Postgres).
 services:
   - type: web
     name: payout
@@ -15,15 +17,10 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: payout-db
-          property: connectionString
+        sync: false
       - key: CHANNEL3_API_KEY
         sync: false
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
-databases:
-  - name: payout-db
-    plan: free
