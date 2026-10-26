@@ -44,7 +44,18 @@ export function createAuthRouter(db: Database, session: AppSession) {
         .onConflictDoNothing({ target: users.username })
         .returning({ id: users.id });
       if (!user) {
-        response.status(409).json({ error: "username_taken", message: "That username is taken." });
+        const [existing] = await db
+          .select({ id: users.id, passwordHash: users.passwordHash })
+          .from(users)
+          .where(eq(users.username, username))
+          .limit(1);
+        const valid = await verifyPassword(password, existing?.passwordHash ?? DUMMY_HASH);
+        if (existing && valid) {
+          session.start(response, existing.id);
+          response.status(200).json({ ok: true, next: target });
+          return;
+        }
+        response.status(409).json({ error: "username_taken", message: "That username is taken. If it's yours, log in instead." });
         return;
       }
       session.start(response, user.id);
@@ -63,7 +74,14 @@ export function createAuthRouter(db: Database, session: AppSession) {
         .where(eq(users.username, username))
         .limit(1);
       const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
-      if (!user || !valid) {
+      if (!user) {
+        response.status(401).json({
+          error: "unknown_user",
+          message: "No account with that username. Create one — it takes a few seconds.",
+        });
+        return;
+      }
+      if (!valid) {
         response.status(401).json({ error: "invalid_login", message: "Wrong username or password." });
         return;
       }

@@ -26,6 +26,7 @@ export type Order = {
   totalCents: number;
   currency: string;
   items: OrderItem[];
+  dispute?: { id: string; status: string | null; reason: string | null } | null;
   shipping?: ShippingAddress | null;
   createdAt?: string;
 };
@@ -44,36 +45,57 @@ export type ApiResult<T> = { ok: true; status: number; data: T } | { ok: false; 
 
 /** Same-origin JSON fetch that never throws. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<ApiResult<T>> {
-  try {
-    const response = await fetch(path, {
-      method: init.method ?? "GET",
-      credentials: "same-origin",
-      headers: init.body !== undefined ? { "Content-Type": "application/json" } : undefined,
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-      cache: "no-store",
-    });
-    let body: unknown = null;
+  const method = init.method ?? "GET";
+  const methodUpper = method.toUpperCase();
+  const canRetry = methodUpper === "GET" || (methodUpper === "POST" && path.startsWith("/api/auth/"));
+  const request: RequestInit = {
+    method,
+    credentials: "same-origin",
+    headers: init.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    cache: "no-store",
+  };
+  let response: Response;
+  let retried = false;
+  while (true) {
     try {
-      body = await response.json();
+      response = await fetch(path, request);
     } catch {
-      body = null;
+      if (canRetry && !retried) {
+        retried = true;
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
+      }
+      return { ok: false, status: 0, message: "Can't reach the server. Check your connection and try again." };
     }
-    if (response.ok) return { ok: true, status: response.status, data: body as T };
-    const record = (body ?? {}) as { message?: string; error?: string };
-    return {
-      ok: false,
-      status: response.status,
-      error: record.error,
-      message: record.message ?? defaultMessage(response.status),
-    };
-  } catch {
-    return { ok: false, status: 0, message: "Can't reach the server. Check your connection and try again." };
+    if (canRetry && !retried && [502, 503, 504].includes(response.status)) {
+      retried = true;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      continue;
+    }
+    break;
   }
+
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  if (response.ok) return { ok: true, status: response.status, data: body as T };
+  const record = (body ?? {}) as { message?: string; error?: string };
+  return {
+    ok: false,
+    status: response.status,
+    error: record.error,
+    message: record.message ?? defaultMessage(response.status),
+  };
 }
 
 function defaultMessage(status: number) {
   if (status === 401) return "Please sign in to continue.";
   if (status === 404) return "Not found.";
   if (status === 429) return "Too many attempts. Wait a few minutes and try again.";
+  if (status === 502 || status === 503 || status === 504) return "The server is waking up. Try again in a few seconds.";
   return "Something went wrong. Please try again.";
 }

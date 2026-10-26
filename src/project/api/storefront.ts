@@ -51,6 +51,7 @@ const checkoutBody = z.object({
   quantity: z.number().int().min(1).max(MAX_QUANTITY).optional(),
   options: options.optional(),
 });
+const lookupBody = z.object({ url: z.url({ protocol: /^https?$/ }).max(2048) });
 
 function invalid(response: Response, error: z.ZodError) {
   response.status(400).json({ error: "invalid_request", message: error.issues[0]?.message ?? "Invalid request." });
@@ -112,6 +113,23 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
       });
       response.setHeader("cache-control", "no-store");
       response.json(page);
+    })
+  );
+
+  router.post(
+    "/api/shop/lookup",
+    handle(async (request, response) => {
+      const parsed = lookupBody.safeParse(request.body ?? {});
+      if (!parsed.success) return invalid(response, parsed.error);
+      const storefront = store(response);
+      if (!storefront) return;
+      const product = await storefront.lookup(parsed.data.url, userId(request));
+      if (!product) {
+        response.status(404).json({ error: "product_not_found", message: "Channel3 couldn't find that product link in its catalog." });
+        return;
+      }
+      response.setHeader("cache-control", "no-store");
+      response.json({ product });
     })
   );
 

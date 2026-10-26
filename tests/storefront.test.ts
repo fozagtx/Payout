@@ -3,8 +3,9 @@ import { eq } from "drizzle-orm";
 import express from "express";
 import { createStorefrontRouter } from "../src/project/api/storefront.js";
 import { createCookieSession } from "../src/project/session.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Product } from "@channel3/sdk/resources";
+import { Channel3ProductProcessingError, createStorefront } from "../src/project/channel3/storefront.js";
 import { orders } from "../src/project/schema.js";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
 import type { Catalog, Product as CatalogProduct, SelectedOptions } from "../src/project/services.js";
@@ -21,6 +22,8 @@ const sdkProduct = (id: string, extra: Partial<Product> = {}): Product => ({
 function fakeStorefront() {
   const searches: StorefrontSearch[] = [];
   const resolves: { id: string; selection?: SelectedOptions }[] = [];
+  const lookups: { url: string; userId?: string }[] = [];
+  const subscriptions = { requested: [] as string[], canceled: [] as string[] };
   const storefront: Storefront = {
     async search(input) {
       searches.push(input);
@@ -40,8 +43,22 @@ function fakeStorefront() {
     websites: async () => [],
     categories: async () => [],
     category: async () => undefined,
+    async lookup(url, userId) {
+      lookups.push({ url, ...(userId ? { userId } : {}) });
+      return url.includes("missing") ? undefined : sdkProduct("lookup-result");
+    },
+    async subscribe(productId) {
+      subscriptions.requested.push(productId);
+      return `subscription-${productId}`;
+    },
+    async unsubscribe(subscriptionId) {
+      subscriptions.canceled.push(subscriptionId);
+    },
+    async earnings() {
+      return { clicks: 3, sales: 1, transactions: [], totals: { sales: 40, commission: 2, currency: "USD" } };
+    },
   };
-  return { storefront, searches, resolves };
+  return { storefront, searches, resolves, lookups, subscriptions };
 }
 
 const catalogGets: { id: string; options?: SelectedOptions }[] = [];
@@ -64,6 +81,43 @@ beforeAll(async () => {
   cookie = (await signUp(server.baseUrl, "shopper")).cookie;
 });
 afterAll(() => server.close());
+afterEach(() => vi.restoreAllMocks());
+
+describe("Channel3 product subscriptions", () => {
+  it("uses the product subscription endpoint and documented event body", async () => {
+    const requests: { input: RequestInfo | URL; init?: RequestInit }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      requests.push({ input, init });
+      return requests.length === 1
+        ? new Response(JSON.stringify({ subscription_id: "sub-123" }), { status: 201 })
+        : new Response(null, { status: 404 });
+    });
+    const storefront = createStorefront("channel3-test-key");
+
+    expect(await storefront.subscribe("product-123")).toBe("sub-123");
+    await storefront.unsubscribe("sub-123");
+
+    expect(String(requests[0]!.input)).toBe("https://api.trychannel3.com/v1/product-subscriptions");
+    expect(requests[0]!.init?.method).toBe("POST");
+    expect(requests[0]!.init?.headers).toEqual({ "content-type": "application/json", "x-api-key": "channel3-test-key" });
+    expect(JSON.parse(String(requests[0]!.init?.body))).toEqual({
+      product_id: "product-123",
+      events: ["offer.price.changed", "offer.availability.changed"],
+    });
+    expect(String(requests[1]!.input)).toBe("https://api.trychannel3.com/v1/product-subscriptions/sub-123");
+    expect(requests[1]!.init).toMatchObject({
+      method: "DELETE",
+      headers: { "x-api-key": "channel3-test-key" },
+    });
+  });
+
+  it("throws a typed error while Channel3 is processing the product", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 409 }));
+    await expect(createStorefront("channel3-test-key").subscribe("product-123")).rejects.toBeInstanceOf(
+      Channel3ProductProcessingError
+    );
+  });
+});
 
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
   fetch(`${server.baseUrl}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
@@ -126,6 +180,20 @@ describe("POST /api/shop/search", () => {
     const response = await post("/api/shop/search", { query: "  " });
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe("invalid_request");
+  });
+});
+
+describe("POST /api/shop/lookup", () => {
+  it("returns a product from the requested link and attributes it to the signed-in user", async () => {
+    const response = await post("/api/shop/lookup", { url: "https://shop.example/product" }, { cookie });
+    expect(response.status).toBe(200);
+    expect((await response.json()).product.id).toBe("lookup-result");
+    expect(fake.lookups.at(-1)).toMatchObject({ url: "https://shop.example/product", userId: expect.any(String) });
+  });
+
+  it("returns 404 for unknown links and rejects non-http URLs", async () => {
+    expect((await post("/api/shop/lookup", { url: "https://shop.example/missing" })).status).toBe(404);
+    expect((await post("/api/shop/lookup", { url: "ftp://shop.example/product" })).status).toBe(400);
   });
 });
 

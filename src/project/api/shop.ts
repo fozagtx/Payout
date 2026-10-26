@@ -1,4 +1,5 @@
 import express, { Router } from "express";
+import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import {
   OrderError,
@@ -15,6 +16,7 @@ import {
   syncOrder,
 } from "../orders.js";
 import type { Services } from "../services.js";
+import { orders } from "../schema.js";
 import type { AppSession } from "../session.js";
 
 /**
@@ -44,6 +46,43 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
       const rows = await listUserOrders(db, userId, 50);
       response.json({ orders: rows.map(orderListView) });
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/api/disputes", async (request, response, next) => {
+    try {
+      const userId = session.currentUserId(request);
+      if (!userId) {
+        response.status(401).json({ error: "not_signed_in" });
+        return;
+      }
+      const [userOrders, disputes] = await Promise.all([
+        db.select().from(orders).where(eq(orders.userId, userId)),
+        services.payments.listDisputes(),
+      ]);
+      const byCaptureId = new Map(userOrders.filter((order) => order.captureId).map((order) => [order.captureId!, order]));
+      const matched = disputes.flatMap((dispute) => {
+        const order = dispute.captureId ? byCaptureId.get(dispute.captureId) : undefined;
+        if (!order) return [];
+        return [{ ...dispute, orderId: order.id }];
+      });
+      for (const dispute of matched) {
+        await db
+          .update(orders)
+          .set({ disputeId: dispute.disputeId, disputeStatus: dispute.status, disputeReason: dispute.reason, updatedAt: new Date() })
+          .where(eq(orders.id, dispute.orderId));
+      }
+      response.setHeader("cache-control", "no-store");
+      response.json({ disputes: matched });
+    } catch (error) {
+      if (error instanceof Error && error.message === "paypal_not_configured") {
+        response.status(503).json({
+          error: "paypal_not_configured",
+          message: "PayPal isn't configured on this server yet (missing sandbox credentials).",
+        });
+        return;
+      }
       next(error);
     }
   });
@@ -80,7 +119,15 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
       }
       const event = (request.body ?? {}) as {
         event_type?: string;
-        resource?: { id?: string; supplementary_data?: { related_ids?: { order_id?: string } }; links?: { rel?: string; href?: string }[] };
+        resource?: {
+          id?: string;
+          dispute_id?: string;
+          reason?: string;
+          status?: string;
+          disputed_transactions?: { seller_transaction_id?: string }[];
+          supplementary_data?: { related_ids?: { order_id?: string } };
+          links?: { rel?: string; href?: string }[];
+        };
       };
       if (!(await services.payments.verifyWebhook({ headers, event }))) {
         response.status(400).json({ error: "invalid_webhook" });
@@ -101,6 +148,24 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
           const captureId = /\/captures\/([^/?#]+)/.exec(up)?.[1];
           const row = captureId ? await findOrderByCaptureId(db, decodeURIComponent(captureId)) : undefined;
           if (row) await markRefunded(db, row.id, resource.id ?? null);
+          break;
+        }
+        case "CUSTOMER.DISPUTE.CREATED":
+        case "CUSTOMER.DISPUTE.UPDATED":
+        case "CUSTOMER.DISPUTE.RESOLVED": {
+          const captureId = resource.disputed_transactions?.[0]?.seller_transaction_id;
+          const row = captureId ? await findOrderByCaptureId(db, captureId) : undefined;
+          if (row) {
+            await db
+              .update(orders)
+              .set({
+                disputeId: resource.dispute_id ?? resource.id ?? null,
+                disputeStatus: resource.status ?? event.event_type.split(".").at(-1) ?? "UNKNOWN",
+                disputeReason: resource.reason ?? null,
+                updatedAt: new Date(),
+              })
+              .where(eq(orders.id, row.id));
+          }
           break;
         }
       }

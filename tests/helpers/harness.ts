@@ -30,6 +30,7 @@ const unusedPayments: Payments = {
   getOrder: async () => { throw new Error("payments not faked in this test"); },
   captureOrder: async () => { throw new Error("payments not faked in this test"); },
   refundCapture: async () => { throw new Error("payments not faked in this test"); },
+  listDisputes: async () => { throw new Error("payments not faked in this test"); },
   verifyWebhook: async () => { throw new Error("payments not faked in this test"); },
 };
 
@@ -40,12 +41,13 @@ export interface TestServer {
 }
 
 /** The backend (no Next.js) on a random port, against a fresh test database. */
-export async function startServer(services: Partial<Omit<Services, "publicUrl">> = {}): Promise<TestServer> {
+export async function startServer(services: Partial<Omit<Services, "publicUrl">> = {}, env: Partial<NodeJS.ProcessEnv> = {}): Promise<TestServer> {
   const { db, pool } = await freshDatabase();
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const baseUrl = `http://localhost:${(server.address() as AddressInfo).port}`;
   const config = loadConfig({
+    ...env,
     PUBLIC_API_URL: baseUrl,
     SESSION_SECRET: "test-secret-test-secret-test-secret-123",
     TRUST_PROXY: "0",

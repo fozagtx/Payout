@@ -89,7 +89,7 @@ export function CheckoutComplete() {
 
   const actions = (
     <div className="mt-8 flex flex-wrap justify-center gap-3">
-      <ButtonLink href="/dashboard">View your orders</ButtonLink>
+      <ButtonLink href="/dashboard/orders">View your orders</ButtonLink>
     </div>
   );
 

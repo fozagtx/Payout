@@ -1,5 +1,5 @@
 import { PayPalApiError } from "../../src/project/paypal/client.js";
-import type { Catalog, CreatePaymentInput, PayPalOrderStatus, Payments, Product } from "../../src/project/services.js";
+import type { Catalog, CreatePaymentInput, Dispute, PayPalOrderStatus, Payments, Product } from "../../src/project/services.js";
 
 export const PRODUCTS: Product[] = [
   { id: "shoe", title: "Trail Runner Shoe", brand: "Acme", priceCents: 4999, currency: "USD", inStock: true, imageUrl: "https://img.test/shoe.jpg", merchant: "Acme Store" },
@@ -31,6 +31,7 @@ export function fakePayments() {
   const calls: string[] = [];
   let next = 1;
   let failCreate: Error | undefined;
+  let disputes: Dispute[] = [];
 
   const view = (id: string) => {
     const order = orders.get(id);
@@ -75,6 +76,10 @@ export function fakePayments() {
       order.refunded = true;
       return { refundId: `REF-${captureId}`, status: "COMPLETED" };
     },
+    async listDisputes() {
+      calls.push("list-disputes");
+      return disputes;
+    },
     async verifyWebhook({ headers }) {
       calls.push("verify-webhook");
       return headers["paypal-transmission-sig"] === "valid";
@@ -90,6 +95,9 @@ export function fakePayments() {
     },
     failNextCreates(error: Error | undefined) {
       failCreate = error;
+    },
+    seedDisputes(value: Dispute[]) {
+      disputes = value;
     },
   };
 }

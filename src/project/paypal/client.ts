@@ -1,4 +1,4 @@
-import type { CreatePaymentInput, PayPalOrderStatus, PaymentOrder, Payments, ShippingAddress } from "../services.js";
+import type { CreatePaymentInput, Dispute, PayPalOrderStatus, PaymentOrder, Payments, ShippingAddress } from "../services.js";
 
 /**
  * PayPal Orders v2 (sandbox unless configured otherwise): client-credentials
@@ -64,6 +64,25 @@ type PayPalOrderBody = {
     };
   }[];
 };
+
+type PayPalDispute = {
+  dispute_id?: string;
+  reason?: string;
+  status?: string;
+  dispute_life_cycle_stage?: string;
+  dispute_amount?: { currency_code?: string; value?: string };
+  disputed_transactions?: { seller_transaction_id?: string }[];
+  create_time?: string;
+  update_time?: string;
+};
+
+function centsFromPayPal(value: string | undefined) {
+  if (!value || !/^\d+(?:\.\d+)?$/.test(value)) throw new Error("invalid PayPal dispute amount");
+  const [whole, fraction = ""] = value.split(".");
+  const cents = Number(whole) * 100 + Number((fraction + "00").slice(0, 2)) + (Number(fraction[2] ?? "0") >= 5 ? 1 : 0);
+  if (!Number.isSafeInteger(cents)) throw new Error("invalid PayPal dispute amount");
+  return cents;
+}
 
 function toShipping(unit: NonNullable<PayPalOrderBody["purchase_units"]>[number] | undefined): ShippingAddress | undefined {
   const shipping = unit?.shipping;
@@ -247,6 +266,26 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
       );
       if (!body.id) throw new PayPalApiError(200, "invalid_refund_response");
       return { refundId: body.id, status: body.status ?? "COMPLETED" };
+    },
+
+    async listDisputes() {
+      credentials();
+      const body = await api<{ items?: PayPalDispute[] }>("GET", "/v1/customer/disputes?page_size=50");
+      return (body.items ?? []).flatMap((item): Dispute[] => {
+        if (!item.dispute_id) return [];
+        const captureId = item.disputed_transactions?.[0]?.seller_transaction_id;
+        return [{
+          disputeId: item.dispute_id,
+          reason: item.reason ?? "UNKNOWN",
+          status: item.status ?? "UNKNOWN",
+          ...(item.dispute_life_cycle_stage ? { stage: item.dispute_life_cycle_stage } : {}),
+          amountCents: centsFromPayPal(item.dispute_amount?.value),
+          currency: item.dispute_amount?.currency_code ?? "USD",
+          ...(captureId ? { captureId } : {}),
+          ...(item.create_time ? { createdAt: item.create_time } : {}),
+          ...(item.update_time ? { updatedAt: item.update_time } : {}),
+        }];
+      });
     },
 
     async verifyWebhook({ headers, event }) {

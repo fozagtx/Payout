@@ -20,7 +20,7 @@ import { useVariantSelection } from "@/hooks/use-variant-selection.js";
 import { formatPrice, isInStock } from "@/lib/format.js";
 import { Button } from "@/components/Button.js";
 import { PayPalMark, Spinner } from "@/components/Icons.js";
-import { fetchProduct, fetchSimilar, resolveVariant, ShopError, startCheckout } from "./shop-api.js";
+import { fetchProduct, fetchSimilar, resolveVariant, ShopError, startCheckout, startWatch } from "./shop-api.js";
 
 type Props = { productId: string; onBack: () => void; onOpen: (product: Product) => void };
 
@@ -75,6 +75,7 @@ function Details({ product: initial, priceHistory, onOpen }: { product: Product;
             <ProductDetailsVariants />
             {variants.error ? <p className="text-sm text-red-700">That option couldn’t be loaded. Pick another one.</p> : null}
             <PayWithPayPal product={product} selection={variants.selection} resolving={variants.isResolving} />
+            <WatchPrice product={product} />
             <ProductDetailsOffers />
             <ProductDetailsDescription />
             <ProductDetailsAttributes />
@@ -89,6 +90,37 @@ function Details({ product: initial, priceHistory, onOpen }: { product: Product;
         <ProductDetailsRecommendations />
       </div>
     </ProductDetailsRoot>
+  );
+}
+
+function WatchPrice({ product }: { product: Product }) {
+  const [state, setState] = useState<{ busy: boolean; watching: boolean; error?: string }>({ busy: false, watching: false });
+
+  async function watch() {
+    setState({ busy: true, watching: false });
+    try {
+      await startWatch(product.id);
+      setState({ busy: false, watching: true });
+    } catch (error) {
+      if (error instanceof ShopError && error.status === 401) {
+        window.location.assign(`/login?next=${encodeURIComponent(`/shop?product=${product.id}`)}`);
+        return;
+      }
+      setState({ busy: false, watching: false, error: error instanceof Error ? error.message : "Couldn’t start this price watch." });
+    }
+  }
+
+  return (
+    <div>
+      {state.watching ? (
+        <p className="text-sm font-medium text-emerald-800">Watching — we'll flag drops in your dashboard</p>
+      ) : (
+        <Button variant="secondary" className="w-full" onClick={() => void watch()} loading={state.busy}>
+          Watch price
+        </Button>
+      )}
+      {state.error ? <p className="mt-2 text-sm text-red-700" role="alert">{state.error}</p> : null}
+    </div>
   );
 }
 

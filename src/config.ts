@@ -7,6 +7,7 @@ export interface Config {
   /** Proxy hops in front of the server (Express `trust proxy`). 0 when exposed directly. */
   trustProxy: number;
   channel3ApiKey?: string;
+  channel3WebhookSecret?: string;
   paypal: {
     clientId?: string;
     clientSecret?: string;
@@ -37,6 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     production: env.NODE_ENV === "production",
     trustProxy,
     channel3ApiKey: env.CHANNEL3_API_KEY || undefined,
+    channel3WebhookSecret: env.CHANNEL3_WEBHOOK_SECRET || undefined,
     paypal: {
       clientId: env.PAYPAL_CLIENT_ID || undefined,
       clientSecret: env.PAYPAL_CLIENT_SECRET || undefined,

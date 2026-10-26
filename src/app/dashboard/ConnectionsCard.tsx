@@ -5,7 +5,7 @@ import { api } from "@/components/api.js";
 import { Button } from "@/components/Button.js";
 import { Card, CardBody, CardHeader } from "@/components/Card.js";
 import { formatShortDate } from "@/components/format.js";
-import { ExternalIcon, LinkIcon } from "@/components/Icons.js";
+import { LinkIcon } from "@/components/Icons.js";
 import type { ConnectionsState } from "./Dashboard.js";
 
 export function ConnectionsCard({ state, reload }: { state: ConnectionsState; reload: () => Promise<void> }) {
@@ -23,19 +23,11 @@ export function ConnectionsCard({ state, reload }: { state: ConnectionsState; re
   }
 
   return (
-    <Card id="apps">
+    <Card>
       <CardHeader
         icon={<LinkIcon />}
         title="Connected apps"
         description="AI apps that can shop on your behalf."
-        action={
-          <a
-            href="/connections"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-brand hover:underline"
-          >
-            Manage <ExternalIcon className="h-3.5 w-3.5" />
-          </a>
-        }
       />
       <CardBody>
         {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}

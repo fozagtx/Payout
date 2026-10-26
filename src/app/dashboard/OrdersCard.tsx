@@ -21,6 +21,8 @@ export function OrdersCard() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [refunding, setRefunding] = useState<string | null>(null);
   const [refundError, setRefundError] = useState<{ id: string; message: string } | null>(null);
+  const [checkingDisputes, setCheckingDisputes] = useState(false);
+  const [disputesError, setDisputesError] = useState<string | null>(null);
 
   async function refund(order: Order) {
     if (!window.confirm(`Refund ${formatMoney(order.totalCents, order.currency)} to the buyer's PayPal Sandbox account?`)) return;
@@ -45,22 +47,38 @@ export function OrdersCard() {
     else setState({ status: "error", message: result.message });
   }, []);
 
+  async function checkDisputes() {
+    setCheckingDisputes(true);
+    setDisputesError(null);
+    const result = await api<{ disputes: unknown[] }>("/api/disputes");
+    setCheckingDisputes(false);
+    if (!result.ok) {
+      setDisputesError(result.message);
+      return;
+    }
+    await load();
+  }
+
   useEffect(() => {
     void load();
   }, [load]);
 
   return (
-    <Card id="orders">
+    <Card>
       <CardHeader
         icon={<BagIcon />}
         title="Orders"
         description="Everything you’ve bought through Claude."
-        action={
+        action={<div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={() => void checkDisputes()} disabled={checkingDisputes}>
+            Check disputes
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => void load()} disabled={state.status === "loading"}>
             Refresh
           </Button>
-        }
+        </div>}
       />
+      {disputesError ? <p className="px-5 pt-3 text-xs text-red-700 sm:px-6" role="alert">{disputesError}</p> : null}
       <div>
         {state.status === "loading" ? (
           <div className="space-y-3 px-5 py-5 sm:px-6" aria-hidden="true">
@@ -126,6 +144,11 @@ export function OrdersCard() {
                   {order.shipping ? (
                     <p className="mt-2 text-xs text-muted-foreground">
                       <span className="font-medium text-ink-soft">Ships to</span> {shippingLine(order.shipping)}
+                    </p>
+                  ) : null}
+                  {order.dispute ? (
+                    <p className={`mt-2 text-xs font-semibold ${["OPEN", "UNDER_REVIEW"].includes(order.dispute.status ?? "") ? "text-red-700" : "text-amber-800"}`}>
+                      Disputed · {order.dispute.reason ?? "Reason unavailable"} · {order.dispute.status ?? "Status unavailable"}
                     </p>
                   ) : null}
                   {info.payable && order.approveUrl ? (
