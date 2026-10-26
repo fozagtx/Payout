@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp, errorHandler } from "../../src/app.js";
 import { loadConfig } from "../../src/config.js";
-import { createDatabase, type Database } from "../../src/db/client.js";
+import { createDatabase, DB_SCHEMA, type Database } from "../../src/db/client.js";
 import { runMigrations } from "../../src/db/migrate.js";
 import { connections, oauthClients, oauthTokens } from "../../src/mcp-kit/schema.js";
 import { users } from "../../src/project/schema.js";
@@ -16,7 +16,7 @@ export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgres://mc
 /** Drops and re-migrates the test database. Test files run one at a time (vitest.config.ts). */
 export async function freshDatabase() {
   const { db, pool } = createDatabase(TEST_DATABASE_URL);
-  await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+  await pool.query(`DROP SCHEMA IF EXISTS ${DB_SCHEMA} CASCADE`);
   await runMigrations(pool, () => {});
   return { db, pool };
 }

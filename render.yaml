@@ -1,6 +1,6 @@
 # One-click deploy on Render: a Node web service.
-# Render's free plan allows one free Postgres per account, so DATABASE_URL is pasted in
-# (an existing Render Postgres with a `payout` database, or any hosted Postgres).
+# Render's free plan allows one free Postgres per account, so DATABASE_URL is pasted in:
+# your existing Render Postgres Internal URL works as-is (Payout uses its own `payout` schema).
 services:
   - type: web
     name: payout
