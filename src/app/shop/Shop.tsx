@@ -25,14 +25,17 @@ function ShopPage() {
   }, []);
 
   const open = useCallback((product: Product) => {
-    window.history.pushState({ fromGrid: true }, "", `/shop?product=${encodeURIComponent(product.id)}`);
+    // depth = product pages opened since the grid, so "Back to results" can jump straight back to it.
+    const depth = (window.history.state?.shopDepth ?? 0) + 1;
+    window.history.pushState({ shopDepth: depth }, "", `/shop?product=${encodeURIComponent(product.id)}`);
     setProductId(product.id);
     window.scrollTo({ top: 0 });
   }, []);
 
   const back = useCallback(() => {
-    if (window.history.state?.fromGrid === true) {
-      window.history.back();
+    const depth = window.history.state?.shopDepth;
+    if (typeof depth === "number" && depth > 0) {
+      window.history.go(-depth);
     } else {
       window.history.replaceState(null, "", "/shop");
       setProductId(null);
