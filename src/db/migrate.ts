@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { Pool } from "pg";
 import { createDatabase, DB_SCHEMA } from "./client.js";
+import { ensureDatabaseUrl } from "./local.js";
 
 const directory = new URL("../../migrations/", import.meta.url);
 
@@ -37,10 +38,12 @@ export async function runMigrations(pool: Pool, log: (line: string) => void = co
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const stopLocalDatabase = await ensureDatabaseUrl();
   const { pool } = createDatabase();
   try {
     await runMigrations(pool);
   } finally {
     await pool.end();
+    await stopLocalDatabase();
   }
 }

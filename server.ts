@@ -2,6 +2,7 @@ import nextModule from "next";
 import { createApp, errorHandler } from "./src/app.js";
 import { loadConfig } from "./src/config.js";
 import { createDatabase } from "./src/db/client.js";
+import { ensureDatabaseUrl } from "./src/db/local.js";
 import { createLiveServices } from "./src/project/services-live.js";
 
 /**
@@ -11,6 +12,7 @@ import { createLiveServices } from "./src/project/services-live.js";
  * consent screen reads.
  */
 const config = loadConfig();
+const stopLocalDatabase = await ensureDatabaseUrl();
 const { db, pool } = createDatabase();
 const { app, provider } = createApp(db, config, createLiveServices(config));
 
@@ -37,6 +39,6 @@ purge.unref();
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    server.close(() => void pool.end());
+    server.close(() => void pool.end().then(stopLocalDatabase));
   });
 }

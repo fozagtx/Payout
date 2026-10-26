@@ -88,7 +88,9 @@ pnpm dev                        # http://localhost:4000
 
 Production: `pnpm build && pnpm start`. To deploy on Render, use the included
 `render.yaml` (a web service; it sets `PUBLIC_API_URL` from
-`RENDER_EXTERNAL_URL`). Render prompts for `DATABASE_URL`: paste the Internal URL of
+`RENDER_EXTERNAL_URL`). `DATABASE_URL` is optional: left empty, Payout starts a
+bundled Postgres (the `embedded-postgres` package) with its data in `.data/postgres`, which
+Render wipes on every redeploy or restart. For data that sticks, paste the Internal URL of
 your existing Render Postgres. Payout keeps its tables in a separate `payout` schema,
 so it can share a database with other apps.
 
