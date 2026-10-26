@@ -1,18 +1,45 @@
 @import "tailwindcss";
 
+/* Light-only theme; `dark:` utilities apply only under an explicit .dark class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 @theme {
+  --color-cream: #fbf9f3;
+  --color-paper: #ffffff;
+  --color-ink: #2d2b28;
+  --color-ink-900: #1c1b19;
+  --color-ink-soft: #55524c;
+  --color-muted: #8b867c;
+  --color-line: #ebe5d9;
+  --color-line-strong: #ddd5c6;
+  --color-tan: #ecdfc8;
+  --color-tan-ink: #a9875b;
   --color-navy: #003087;
   --color-navy-900: #001c54;
-  --color-brand: #0070e0;
-  --color-brand-600: #005ec2;
-  --color-sky: #e8f2ff;
+  --color-brand: #3f7ee8;
+  --color-brand-600: #2f6bd3;
+  --color-sky: #eaf1fd;
   --color-paypal: #ffc439;
   --color-paypal-600: #f2b52a;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 html {
@@ -20,21 +47,54 @@ html {
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  @apply bg-cream text-ink antialiased;
   min-height: 100dvh;
+  font-feature-settings: "ss01", "cv11";
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--color-brand) 25%, transparent);
+  background: var(--color-tan);
+}
+
+/* Faint dot grid used behind heroes. */
+.bg-dots {
+  background-image: radial-gradient(circle at 1px 1px, rgba(169, 135, 91, 0.28) 1px, transparent 0);
+  background-size: 28px 28px;
+}
+
+/* Hand-laid highlighter strip behind headline lines. */
+.mark {
+  position: relative;
+  z-index: 0;
+  padding: 0 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(169, 135, 91, 0.08)),
+    var(--color-tan);
+  border-radius: 0.12em;
+}
+
+.eyebrow {
+  @apply font-mono text-[12px] tracking-[0.08em] text-tan-ink uppercase;
 }
 
 @keyframes payout-rise {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-rise {
-  animation: payout-rise 0.5s ease-out both;
+  animation: payout-rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
+
+@keyframes payout-float {
+  0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+  50% { transform: translateY(-8px) rotate(var(--r, 0deg)); }
+}
+.animate-float {
+  animation: payout-float 6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-rise { animation: none; }
+  .animate-rise, .animate-float { animation: none; }
 }

@@ -28,31 +28,31 @@ function errorMessage(code: string) {
 export function OrderSummary({ order }: { order: PublicOrder }) {
   const items = order.items ?? [];
   return (
-    <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Order summary</span>
+    <div className="mt-8 overflow-hidden rounded-2xl border border-line bg-paper text-left">
+      <div className="flex items-center justify-between border-b border-line px-5 py-3">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted">Order summary</span>
         <StatusPill status={order.status} />
       </div>
-      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+      <ul className="divide-y divide-line">
         {items.map((item, i) => (
           <li key={`${item.productId}-${i}`} className="flex items-center gap-3 px-5 py-3">
             <Thumb src={item.imageUrl} alt={item.title} className="h-12 w-12" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{item.title}</p>
-              <p className="text-xs text-slate-500">
+              <p className="truncate text-sm font-medium text-ink">{item.title}</p>
+              <p className="text-xs text-muted">
                 {item.quantity} × {formatMoney(item.unitCents, order.currency)}
                 {item.merchant ? ` · ${item.merchant}` : ""}
               </p>
             </div>
-            <span className="text-sm font-semibold text-slate-900 dark:text-white">
+            <span className="text-sm font-semibold text-ink">
               {formatMoney(item.unitCents * item.quantity, order.currency)}
             </span>
           </li>
         ))}
       </ul>
-      <div className="flex items-center justify-between bg-slate-50 px-5 py-3.5 dark:bg-slate-950/50">
-        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Total</span>
-        <span className="text-lg font-bold text-navy dark:text-white">{formatMoney(order.totalCents, order.currency)}</span>
+      <div className="flex items-center justify-between bg-cream px-5 py-3.5">
+        <span className="text-sm font-semibold text-ink-soft">Total</span>
+        <span className="font-mono text-lg font-medium text-ink">{formatMoney(order.totalCents, order.currency)}</span>
       </div>
     </div>
   );
@@ -60,7 +60,7 @@ export function OrderSummary({ order }: { order: PublicOrder }) {
 
 function ReturnHint() {
   return (
-    <p className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+    <p className="mt-6 flex items-center justify-center gap-2 text-sm text-ink-soft">
       <ChatIcon className="h-4 w-4" /> You can close this tab and return to Claude.
     </p>
   );
@@ -95,7 +95,7 @@ export function CheckoutComplete() {
 
   if (state.status === "loading") {
     return (
-      <div className="flex flex-col items-center py-16 text-slate-500" role="status">
+      <div className="flex flex-col items-center py-16 text-muted" role="status">
         <Spinner className="h-7 w-7" />
         <p className="mt-4 text-sm">Confirming your payment with PayPal…</p>
       </div>
@@ -110,8 +110,8 @@ export function CheckoutComplete() {
         <StatusIcon tone="green">
           <CheckIcon className="h-8 w-8" />
         </StatusIcon>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight text-navy sm:text-3xl dark:text-white">Payment complete</h1>
-        <p className="mt-2 text-slate-600 dark:text-slate-400">Thanks! PayPal confirmed your payment.</p>
+        <h1 className="mt-5 text-[32px] leading-[1.05] font-semibold tracking-[-0.045em] text-ink sm:text-[40px]">Payment complete</h1>
+        <p className="mt-2 text-ink-soft">Thanks! PayPal confirmed your payment.</p>
         <OrderSummary order={state.order} />
         <ReturnHint />
         {actions}
@@ -145,10 +145,10 @@ export function CheckoutComplete() {
       <StatusIcon tone={tone}>
         <AlertIcon className="h-8 w-8" />
       </StatusIcon>
-      <h1 className="mt-5 text-2xl font-bold tracking-tight text-navy sm:text-3xl dark:text-white">{title}</h1>
-      <p className="mx-auto mt-2 max-w-md text-slate-600 dark:text-slate-400">{message}</p>
+      <h1 className="mt-5 text-[32px] leading-[1.05] font-semibold tracking-[-0.045em] text-ink sm:text-[40px]">{title}</h1>
+      <p className="mx-auto mt-2 max-w-md text-ink-soft">{message}</p>
       {order ? <OrderSummary order={order} /> : null}
-      <p className="mt-6 flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+      <p className="mt-6 flex items-center justify-center gap-2 text-sm text-ink-soft">
         <ChatIcon className="h-4 w-4" /> Head back to Claude and ask it to try the checkout again.
       </p>
       {actions}

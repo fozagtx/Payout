@@ -20,16 +20,16 @@ function isPublicHttps(url: string) {
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-bold text-white dark:bg-brand">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-[11px] font-medium text-cream">
         {n}
       </span>
-      <span className="pt-0.5 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{children}</span>
+      <span className="pt-0.5 text-sm leading-relaxed text-ink-soft">{children}</span>
     </li>
   );
 }
 
 const Kbd = ({ children }: { children: React.ReactNode }) => (
-  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-medium text-slate-900 dark:bg-slate-800 dark:text-slate-100">{children}</span>
+  <span className="rounded-md bg-cream px-1.5 py-0.5 font-medium text-ink">{children}</span>
 );
 
 export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; connected: boolean }) {
@@ -48,11 +48,11 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
       />
       <CardBody className="space-y-6">
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500">Your MCP connector URL</label>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">Your MCP connector URL</label>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 font-mono text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+            <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-line bg-cream px-3.5 py-2.5 font-mono text-sm text-ink">
               {mcpUrl === null ? (
-                <span className="inline-block h-4 w-56 animate-pulse rounded bg-slate-200 align-middle dark:bg-slate-800" />
+                <span className="inline-block h-4 w-56 animate-pulse rounded bg-line align-middle" />
               ) : (
                 <span className="whitespace-nowrap">{url}</span>
               )}
@@ -60,7 +60,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
             <CopyButton text={url} label="Copy URL" className="sm:w-36" />
           </div>
           {local ? (
-            <p className="mt-2.5 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-400/10 dark:text-amber-200">
+            <p className="mt-2.5 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <AlertIcon className="mt-px h-4 w-4" />
               <span>
                 Claude can only reach a <strong>public HTTPS</strong> URL. When running locally, expose this server with a tunnel (for
@@ -68,12 +68,12 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
               </span>
             </p>
           ) : (
-            <p className="mt-2 text-xs text-slate-500">The URL must be public HTTPS so Claude can reach it.</p>
+            <p className="mt-2 text-xs text-muted">The URL must be public HTTPS so Claude can reach it.</p>
           )}
         </div>
 
         <div>
-          <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">On claude.ai or the Claude app</h3>
+          <h3 className="mb-3 text-sm font-semibold text-ink">On claude.ai or the Claude app</h3>
           <ol className="space-y-2.5">
             <Step n={1}>
               Open <Kbd>Settings</Kbd> → <Kbd>Connectors</Kbd>.
@@ -90,23 +90,23 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
           </ol>
         </div>
 
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800">
+        <div className="rounded-xl border border-line">
           <button
             type="button"
             onClick={() => setCodeOpen((v) => !v)}
             aria-expanded={codeOpen}
-            className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-brand dark:text-slate-200 dark:hover:bg-slate-800/50"
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-ink hover:bg-cream focus-visible:outline-2 focus-visible:outline-ink"
           >
             <span className="flex items-center gap-2">
-              <TerminalIcon className="h-4 w-4 text-slate-500" /> Using Claude Code instead?
+              <TerminalIcon className="h-4 w-4 text-muted" /> Using Claude Code instead?
             </span>
-            <ChevronIcon className={`h-4 w-4 text-slate-500 transition-transform ${codeOpen ? "rotate-180" : ""}`} />
+            <ChevronIcon className={`h-4 w-4 text-muted transition-transform ${codeOpen ? "rotate-180" : ""}`} />
           </button>
           {codeOpen ? (
-            <div className="space-y-3 border-t border-slate-200 px-4 py-4 dark:border-slate-800">
-              <p className="text-sm text-slate-600 dark:text-slate-400">Run this in your terminal, then open Claude Code and use <code className="font-mono">/mcp</code> to sign in:</p>
+            <div className="space-y-3 border-t border-line px-4 py-4">
+              <p className="text-sm text-ink-soft">Run this in your terminal, then open Claude Code and use <code className="font-mono">/mcp</code> to sign in:</p>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <pre className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-slate-900 px-3.5 py-2.5 font-mono text-[13px] text-slate-100 dark:bg-black">
+                <pre className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-ink px-3.5 py-2.5 font-mono text-[13px] text-cream">
                   <code>{cliCommand}</code>
                 </pre>
                 <CopyButton text={cliCommand} label="Copy" variant="secondary" size="sm" className="h-10" />
@@ -115,12 +115,12 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
           ) : null}
         </div>
 
-        <div className="rounded-xl bg-gradient-to-br from-sky to-white p-4 ring-1 ring-blue-100 dark:from-brand/15 dark:to-slate-900 dark:ring-brand/20">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-brand dark:text-sky-300">
+        <div className="rounded-xl bg-cream p-4 ring-1 ring-line">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-tan-ink">
             <SparkIcon className="h-4 w-4" /> Try this in Claude
           </div>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[15px] font-medium text-navy dark:text-white">“{SAMPLE_PROMPT}”</p>
+            <p className="text-[15px] font-medium text-ink">“{SAMPLE_PROMPT}”</p>
             <CopyButton text={SAMPLE_PROMPT} label="Copy prompt" variant="secondary" size="sm" className="self-start sm:self-auto" />
           </div>
         </div>

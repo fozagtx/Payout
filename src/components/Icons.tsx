@@ -1,4 +1,4 @@
-type IconProps = { className?: string };
+export type IconProps = { className?: string };
 const base = "shrink-0";
 
 function Svg({ className = "h-5 w-5", children }: IconProps & { children: React.ReactNode }) {
@@ -76,4 +76,19 @@ export const PayPalMark = ({ className = "h-5 w-5" }: IconProps) => (
     <path fill="#003087" d="M8.2 21H4.6a.5.5 0 0 1-.5-.6L6.9 3.4A.6.6 0 0 1 7.5 3h6.3c3.6 0 5.6 1.8 5 5.1-.7 3.9-3.3 5.6-7 5.6H9.9a.6.6 0 0 0-.6.5L8.2 21Z" />
     <path fill="#0070e0" d="M19.6 8.4c-.8 3.7-3.3 5.6-7 5.6h-1.4a.6.6 0 0 0-.6.5l-1 6.1a.4.4 0 0 0 .4.4h2.6a.5.5 0 0 0 .5-.4l.5-2.9a.5.5 0 0 1 .5-.4h.9c3 0 5.2-1.4 5.8-4.6.3-1.6 0-2.9-1.2-3.8v-.5Z" />
   </svg>
+);
+export const HomeIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1v-9.5Z" /></Svg>
+);
+export const SidebarIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M9.5 4.5v15" /></Svg>
+);
+export const MenuIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M4 7h16M4 12h16M4 17h16" /></Svg>
+);
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></Svg>
+);
+export const LockIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></Svg>
 );

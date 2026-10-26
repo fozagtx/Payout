@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Connection, type User } from "@/components/api.js";
 import { Button } from "@/components/Button.js";
-import { Footer, Header } from "@/components/Header.js";
 import { LogoutIcon, Spinner } from "@/components/Icons.js";
+import { Logo } from "@/components/Logo.js";
 import { ConnectCard } from "./ConnectCard.js";
 import { ConnectionsCard } from "./ConnectionsCard.js";
 import { OrdersCard } from "./OrdersCard.js";
 import { PayPalCard } from "./PayPalCard.js";
+import { sections, Sidebar, useCollapsed } from "./Sidebar.js";
 
 export type ConnectionsState =
   | { status: "loading" }
@@ -28,6 +29,7 @@ export function Dashboard() {
   const [connections, setConnections] = useState<ConnectionsState>({ status: "loading" });
   const [loggingOut, setLoggingOut] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
+  const { collapsed, toggle } = useCollapsed();
 
   const loadConnections = useCallback(async () => {
     const result = await api<{ connections: Connection[]; mcpUrl: string }>("/api/connections");
@@ -62,64 +64,87 @@ export function Dashboard() {
     window.location.assign("/");
   }
 
-  const actions = user ? (
-    <div className="flex items-center gap-2">
-      <span className="hidden items-center gap-2 text-sm text-slate-600 sm:flex dark:text-slate-300">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-navy text-xs font-bold uppercase text-white dark:bg-brand">
-          {user.username.slice(0, 1)}
-        </span>
-        {user.username}
-      </span>
-      <Button variant="secondary" size="sm" className="h-9" onClick={logout} loading={loggingOut}>
-        {loggingOut ? null : <LogoutIcon className="h-4 w-4" />} Log out
-      </Button>
-    </div>
-  ) : null;
+  if (fatal) {
+    return (
+      <main className="bg-dots flex flex-1 items-center justify-center px-4 py-24 text-center">
+        <div className="max-w-lg">
+          <h1 className="text-2xl font-semibold tracking-[-0.03em] text-ink">We couldn’t load your dashboard</h1>
+          <p className="mt-2 text-ink-soft">{fatal}</p>
+          <Button className="mt-6" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="flex flex-1 justify-center py-32 text-muted" role="status" aria-label="Loading">
+        <Spinner className="h-6 w-6" />
+      </main>
+    );
+  }
+
+  const connected = connections.status === "ready" && connections.connections.length > 0;
 
   return (
-    <>
-      <Header actions={actions} />
-      <main className="flex-1">
-        {fatal ? (
-          <div className="mx-auto max-w-lg px-4 py-24 text-center">
-            <h1 className="text-xl font-semibold">We couldn’t load your dashboard</h1>
-            <p className="mt-2 text-slate-600 dark:text-slate-400">{fatal}</p>
-            <Button className="mt-6" onClick={() => window.location.reload()}>
-              Try again
+    <div className="flex min-h-dvh">
+      <Sidebar username={user.username} collapsed={collapsed} onToggle={toggle} onLogout={logout} loggingOut={loggingOut} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b border-line bg-cream/85 backdrop-blur-md lg:hidden">
+          <div className="flex h-16 items-center justify-between px-4">
+            <Logo />
+            <Button variant="secondary" size="sm" onClick={logout} loading={loggingOut}>
+              {loggingOut ? null : <LogoutIcon className="h-4 w-4" />} Log out
             </Button>
           </div>
-        ) : !user ? (
-          <div className="flex justify-center py-32 text-slate-400" role="status" aria-label="Loading">
-            <Spinner className="h-6 w-6" />
-          </div>
-        ) : (
-          <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-            <div className="animate-rise mb-8">
-              <h1 className="text-2xl font-bold tracking-tight text-navy sm:text-3xl dark:text-white">
-                {greeting()}, {user.username}
-              </h1>
-              <p className="mt-1.5 text-slate-600 dark:text-slate-400">
-                Connect Claude once, then shop by just asking. Your orders show up here.
-              </p>
+          <nav className="flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Dashboard">
+            {sections.map((section) => (
+              <a key={section.id} href={`#${section.id}`} className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-paper px-3 text-[13px] text-ink-soft">
+                <section.icon className="h-3.5 w-3.5" /> {section.label}
+              </a>
+            ))}
+          </nav>
+        </header>
+
+        <main className="flex-1">
+          <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+            <div className="animate-rise mb-8 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="eyebrow">Dashboard</p>
+                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.045em] text-ink sm:text-[40px] sm:leading-[1.05]">
+                  {greeting()}, <span className="mark">{user.username}</span>
+                </h1>
+                <p className="mt-3 text-ink-soft">Connect Claude once, then shop by just asking. Your orders show up here.</p>
+              </div>
+              <span
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-mono text-[11px] tracking-wide uppercase ${
+                  connected ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-line bg-paper text-ink-soft"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted"}`} />
+                {connected ? "Claude connected" : "Not connected yet"}
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-              <div className="min-w-0 space-y-6">
-                <ConnectCard
-                  mcpUrl={connections.status === "ready" ? connections.mcpUrl : null}
-                  connected={connections.status === "ready" && connections.connections.length > 0}
-                />
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+              <div className="min-w-0 space-y-5">
+                <ConnectCard mcpUrl={connections.status === "ready" ? connections.mcpUrl : null} connected={connected} />
                 <OrdersCard />
               </div>
-              <div className="min-w-0 space-y-6">
+              <div className="min-w-0 space-y-5">
                 <ConnectionsCard state={connections} reload={loadConnections} />
                 <PayPalCard user={user} onChange={(paypalEmail) => setUser({ ...user, paypalEmail })} />
               </div>
             </div>
           </div>
-        )}
-      </main>
-      <Footer />
-    </>
+        </main>
+        <footer className="border-t border-line px-4 py-6 font-mono text-[11px] tracking-wide text-muted uppercase sm:px-8">
+          PayPal Sandbox · no real money moves
+        </footer>
+      </div>
+    </div>
   );
 }

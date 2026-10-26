@@ -1,18 +1,18 @@
 type Tone = "amber" | "green" | "blue" | "slate" | "red";
 
 const tones: Record<Tone, string> = {
-  amber: "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-400/30",
-  green: "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-400/30",
-  blue: "bg-sky text-brand-600 ring-blue-200 dark:bg-brand/15 dark:text-sky-300 dark:ring-brand/40",
-  slate: "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
-  red: "bg-red-50 text-red-700 ring-red-200 dark:bg-red-400/10 dark:text-red-300 dark:ring-red-400/30",
+  amber: "bg-amber-50 text-amber-800 ring-amber-200/80",
+  green: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+  blue: "bg-sky text-brand-600 ring-blue-200/80",
+  slate: "bg-cream text-ink-soft ring-line-strong",
+  red: "bg-red-50 text-red-700 ring-red-200/80",
 };
 
 const dots: Record<Tone, string> = {
   amber: "bg-amber-500",
   green: "bg-emerald-500",
   blue: "bg-brand",
-  slate: "bg-slate-400",
+  slate: "bg-muted",
   red: "bg-red-500",
 };
 
@@ -39,7 +39,7 @@ export function orderStatus(status: string): { label: string; tone: Tone; payabl
 
 export function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${tones[tone]}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[11px] font-medium tracking-wide ring-1 ring-inset ${tones[tone]}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${dots[tone]}`} aria-hidden="true" />
       {children}
     </span>

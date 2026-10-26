@@ -15,5 +15,5 @@ export const BRANDING: Branding = {
   name: process.env.BRAND_NAME ?? "Payout",
   faviconPath:
     process.env.BRAND_FAVICON_PATH ?? fileURLToPath(new URL("./assets/favicon.svg", import.meta.url)),
-  accentColor: process.env.BRAND_ACCENT_COLOR ?? "#0070e0",
+  accentColor: process.env.BRAND_ACCENT_COLOR ?? "#2d2b28",
 };
