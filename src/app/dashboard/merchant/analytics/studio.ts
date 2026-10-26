@@ -1,4 +1,12 @@
-import { studioTheme, type AgDataSourcesDefinition, type AgFieldDefinition, type AgFormat, type AgReportState, type AgWidgetLayoutState } from "ag-studio";
+import {
+  createFormats,
+  studioTheme,
+  type AgDataSourcesDefinition,
+  type AgFieldDefinition,
+  type AgFormat,
+  type AgReportState,
+  type AgWidgetLayoutState,
+} from "ag-studio";
 
 export type AnalyticsData = {
   licenseKey: string | null;
@@ -33,10 +41,24 @@ type FieldSpec = [id: string, name: string, format: AgFormat, hide?: boolean];
 const fields = (specs: FieldSpec[]): AgFieldDefinition[] =>
   specs.map(([id, name, format, hide]) => ({ id, name, format, ...(hide ? { hide } : {}) }));
 
+const USD_FORMATS = createFormats({
+  overrides: {
+    currencyFormat: {
+      formatOptions: {
+        format: new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }),
+      },
+    },
+  },
+});
+
 const sum = (id: string) => ({ id, aggregation: "sum" as const });
 
 export function buildStudioData(data: AnalyticsData): AgDataSourcesDefinition {
   return {
+    formats: USD_FORMATS,
     description:
       "Payout's own data for the signed-in merchant: PayPal Sandbox orders placed from Claude or the shop, their refunds and disputes, " +
       "Channel3 price watches, and Channel3 affiliate commission. Money is in each order's currency (USD in practice).",
@@ -162,7 +184,16 @@ export const initialReport: AgReportState = {
         "orders-by-status": {
           type: "donut-chart",
           dataMapping: { categoryKey: [{ id: "orders.statusGroup" }], valueKey: [countd("orders.id")] },
-          format: title("Orders by status"),
+          format: {
+            ...title("Orders by status"),
+            style: {
+              theme: {
+                common: {
+                  legend: { enabled: true, position: "right" },
+                },
+              },
+            },
+          },
         },
         "revenue-by-day": {
           type: "line-chart",
