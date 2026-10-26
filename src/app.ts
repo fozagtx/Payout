@@ -6,6 +6,8 @@ import { createMcpKit } from "./mcp-kit/index.js";
 import { createAuthRouter } from "./project/api/auth.js";
 import { createConnectionsRouter } from "./project/api/connections.js";
 import { createImageRouter } from "./project/api/images.js";
+import { createAnalyticsRouter } from "./project/api/analytics.js";
+import { createMerchantRouter } from "./project/api/merchant.js";
 import { createShopRouter } from "./project/api/shop.js";
 import { createStorefrontRouter } from "./project/api/storefront.js";
 import { createWatchesRouter } from "./project/api/watches.js";
@@ -43,6 +45,8 @@ export function createApp(db: Database, config: Config, services: Services) {
     allowLoopbackClientMetadata: !config.production && new URL(config.apiUrl).hostname === "localhost",
   });
   app.use(mcp.router);
+  app.use(createAnalyticsRouter(db, session, services));
+  app.use(createMerchantRouter(db, session, services));
   app.use(createWatchesRouter(db, session, services, config.channel3WebhookSecret));
   app.use(createStorefrontRouter(db, session, services));
   app.use(createAuthRouter(db, session));

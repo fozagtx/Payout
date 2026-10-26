@@ -31,11 +31,17 @@ export function RefundDialog({
   open,
   onOpenChange,
   onRefundSuccess,
+  mode = "merchant",
+  initial,
+  buyer,
 }: {
   order: Order | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRefundSuccess: (order: Order, amountCents: number) => void;
+  mode?: "request" | "merchant";
+  initial?: { amountCents: number; reason: RefundReason; note?: string };
+  buyer?: string;
 }) {
   const [step, setStep] = useState<"details" | "review">("details");
   const [partial, setPartial] = useState(false);
@@ -54,10 +60,11 @@ export function RefundDialog({
   useEffect(() => {
     if (!open) return;
     setStep("details");
-    setPartial(false);
-    setAmountInput("");
-    setReason("");
-    setNote("");
+    const remaining = order ? (order.totalCents - (order.refundedCents ?? order.refunds?.reduce((sum, refund) => sum + refund.cents, 0) ?? 0)) : 0;
+    setPartial(Boolean(initial && initial.amountCents < remaining));
+    setAmountInput(initial ? (initial.amountCents / 100).toFixed(2) : "");
+    setReason(initial?.reason ?? "");
+    setNote(initial?.note ?? "");
     setLoading(false);
     setServerError(null);
   }, [open, order?.id]);
@@ -66,7 +73,8 @@ export function RefundDialog({
     if (!order || !reason || amountCents === undefined || !amountValid) return;
     setLoading(true);
     setServerError(null);
-    const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund`, {
+    const path = mode === "request" ? `/api/orders/${order.id}/refund-request` : `/api/merchant/orders/${order.id}/refund`;
+    const result = await api<{ order: Order }>(path, {
       method: "POST",
       body: {
         ...(partial ? { amountCents } : {}),
@@ -92,7 +100,7 @@ export function RefundDialog({
               <div className="flex items-start gap-3">
                 <Thumb src={order.items[0]?.imageUrl} alt={order.items[0]?.title ?? ""} className="h-14 w-14 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <DialogTitle>Refund order</DialogTitle>
+                  <DialogTitle>{mode === "request" ? "Request a refund" : "Refund order"}</DialogTitle>
                   <DialogDescription className="mt-1 truncate">{order.items[0]?.title ?? "Order"}</DialogDescription>
                   <p className="mt-1 text-sm text-ink-soft">Paid {formatMoney(order.totalCents, order.currency)}</p>
                   {refundedCents > 0 ? (
@@ -168,13 +176,14 @@ export function RefundDialog({
           ) : (
             <>
               <div>
-                <DialogTitle>Review refund</DialogTitle>
-                <DialogDescription className="mt-1">Check the details before sending this refund.</DialogDescription>
+                <DialogTitle>{mode === "request" ? "Send refund request" : "Review refund"}</DialogTitle>
+                <DialogDescription className="mt-1">{mode === "request" ? "The store reviews refund requests before any money moves." : "Check the details before sending this refund."}</DialogDescription>
               </div>
               <div className="space-y-4 rounded-xl border border-line bg-white/60 p-4 text-sm">
                 <p className="font-semibold text-ink">
                   Refund {formatMoney(amountCents ?? 0, order.currency)} to {order.shipping?.name || "the buyer"} through PayPal Sandbox
                 </p>
+                {mode === "merchant" && buyer ? <p className="text-xs text-ink-soft">Buyer: {buyer}</p> : null}
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reason</p>
                   <p className="mt-1 text-ink">{reason ? REASON_LABELS[reason] : ""}</p>
@@ -188,7 +197,7 @@ export function RefundDialog({
               {serverError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{serverError}</p> : null}
               <DialogFooter>
                 <Button variant="secondary" onClick={() => { setServerError(null); setStep("details"); }} disabled={loading}>Back</Button>
-                <Button onClick={() => void confirmRefund()} loading={loading}>Confirm refund</Button>
+                <Button onClick={() => void confirmRefund()} loading={loading}>{mode === "request" ? "Send request" : "Confirm refund"}</Button>
               </DialogFooter>
             </>
           )

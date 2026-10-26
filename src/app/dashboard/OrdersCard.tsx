@@ -31,6 +31,7 @@ function shippingLine(shipping: ShippingAddress) {
 export function OrdersCard() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [refundOrder, setRefundOrder] = useState<Order | null>(null);
+  const [refundMode, setRefundMode] = useState<"request" | "merchant">("request");
   const [refundSuccess, setRefundSuccess] = useState<Record<string, string>>({});
   const [checkingDisputes, setCheckingDisputes] = useState(false);
   const [disputesError, setDisputesError] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export function OrdersCard() {
               const count = items.reduce((n, i) => n + (i.quantity || 0), 0);
               const first = items[0];
               const refundedCents = order.refundedCents ?? order.refunds?.reduce((sum, refund) => sum + refund.cents, 0) ?? 0;
+              const pendingRequest = order.refundRequest?.status === "pending" ? order.refundRequest : null;
               return (
                 <li key={order.id} className="px-5 py-4 sm:px-6">
                   <div className="flex items-start justify-between gap-3">
@@ -159,6 +161,17 @@ export function OrdersCard() {
                       Disputed · {order.dispute.reason ?? "Reason unavailable"} · {order.dispute.status ?? "Status unavailable"}
                     </p>
                   ) : null}
+                  {pendingRequest ? (
+                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-amber-800">
+                      <span>Refund requested · {formatMoney(pendingRequest.amountCents, order.currency)} · waiting for the store</span>
+                      <Button variant="ghost" size="sm" onClick={async () => {
+                        const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund-request`, { method: "DELETE" });
+                        if (result.ok) setState((current) => current.status === "ready" ? { status: "ready", orders: current.orders.map((item) => item.id === order.id ? result.data.order : item) } : current);
+                      }}>Cancel request</Button>
+                    </div>
+                  ) : order.refundRequest?.status === "declined" ? (
+                    <p className="mt-2 text-xs text-amber-800">Refund request declined{order.refundRequest.merchantMessage ? `: ${order.refundRequest.merchantMessage}` : ""}</p>
+                  ) : null}
                   {order.refunds?.length ? (
                     <div className="mt-3 rounded-xl bg-cream/70 px-3 py-2.5">
                       <p className="text-xs font-semibold text-ink">Refund history</p>
@@ -185,9 +198,10 @@ export function OrdersCard() {
                   {order.status === "COMPLETED" || order.status === "PARTIALLY_REFUNDED" ? (
                     <div className="mt-3 flex items-center justify-end gap-3">
                       {refundSuccess[order.id] ? <span className="text-xs text-emerald-800" role="status">{refundSuccess[order.id]}</span> : null}
-                      <Button variant="secondary" size="sm" onClick={() => setRefundOrder(order)}>
-                        Refund
+                      {!pendingRequest ? <Button variant="secondary" size="sm" onClick={() => { setRefundMode("request"); setRefundOrder(order); }}>
+                        Request refund
                       </Button>
+                      : null}
                     </div>
                   ) : null}
                 </li>
@@ -199,6 +213,7 @@ export function OrdersCard() {
     </Card>
     <RefundDialog
       order={refundOrder}
+      mode={refundMode}
       open={refundOrder !== null}
       onOpenChange={(open) => { if (!open) setRefundOrder(null); }}
       onRefundSuccess={(updatedOrder, amountCents) => {
@@ -207,7 +222,7 @@ export function OrdersCard() {
             ? { status: "ready", orders: current.orders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)) }
             : current
         );
-        setRefundSuccess((current) => ({ ...current, [updatedOrder.id]: `Refunded ${formatMoney(amountCents, updatedOrder.currency)}.` }));
+        setRefundSuccess((current) => ({ ...current, [updatedOrder.id]: refundMode === "request" ? `Refund requested ${formatMoney(amountCents, updatedOrder.currency)}.` : `Refunded ${formatMoney(amountCents, updatedOrder.currency)}.` }));
       }}
     />
     </>

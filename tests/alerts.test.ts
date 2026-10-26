@@ -94,6 +94,7 @@ let alice: { cookie: string; userId: string; token: string };
 let bob: { cookie: string; userId: string };
 
 beforeAll(async () => {
+  process.env.PAYOUT_ADMIN_USERNAMES = "watcher_a";
   storefrontInputs.product.length = 0;
   storefrontInputs.subscribed.length = 0;
   storefrontInputs.unsubscribed.length = 0;
@@ -107,7 +108,7 @@ beforeAll(async () => {
   alice = { ...a, token: (await issueAccessToken(server.db, server.baseUrl, a.userId)).token };
   bob = await signUp(server.baseUrl, "watcher_b");
 });
-afterAll(() => server.close());
+afterAll(() => { delete process.env.PAYOUT_ADMIN_USERNAMES; return server.close(); });
 
 const post = (path: string, body: unknown, cookie?: string) =>
   fetch(`${server.baseUrl}${path}`, {
@@ -284,8 +285,8 @@ describe("Channel3 earnings and MCP watch tools", () => {
     const baseUrl = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;
     try {
       const response = await fetch(`${baseUrl}/api/earnings`, { headers: { cookie: alice.cookie } });
-      expect(response.status).toBe(503);
-      expect((await response.json()).error).toBe("search_not_configured");
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toBe("search_not_configured");
     } finally {
       await new Promise<void>((resolve, reject) => http.close((error) => error ? reject(error) : resolve()));
     }
@@ -296,7 +297,7 @@ describe("Channel3 earnings and MCP watch tools", () => {
     const response = await fetch(`${server.baseUrl}/api/earnings?days=14`, { headers: { cookie: alice.cookie } });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ clicks: 12, sales: 2, totals: { sales: 50, commission: 4.5, currency: "USD" } });
-    expect(storefrontInputs.earnings.at(-1)).toEqual({ userId: alice.userId, days: 14 });
+    expect(storefrontInputs.earnings.at(-1)).toEqual({  userId: undefined, days: 14 });
     expect((await fetch(`${server.baseUrl}/api/earnings?days=91`, { headers: { cookie: alice.cookie } })).status).toBe(400);
   });
 

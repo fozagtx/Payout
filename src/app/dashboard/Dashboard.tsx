@@ -7,7 +7,7 @@ import { api, type Connection, type User } from "@/components/api.js";
 import { Button } from "@/components/Button.js";
 import { LogoutIcon, Spinner } from "@/components/Icons.js";
 import { Logo } from "@/components/Logo.js";
-import { sections, Sidebar, useCollapsed } from "./Sidebar.js";
+import { merchantSections, sections, Sidebar, useCollapsed } from "./Sidebar.js";
 
 export type ConnectionsState =
   | { status: "loading" }
@@ -64,22 +64,23 @@ export function Dashboard({ children }: { children: ReactNode }) {
     );
   }
 
+  const navSections = user.role === "merchant" ? [...sections, ...merchantSections] : sections;
   return (
     <div className="flex min-h-dvh">
-      <Sidebar username={user.username} collapsed={collapsed} onToggle={toggle} onLogout={logout} loggingOut={loggingOut} />
+      <Sidebar username={user.username} role={user.role} collapsed={collapsed} onToggle={toggle} onLogout={logout} loggingOut={loggingOut} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur-md">
           <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-8">
             <Link href="/dashboard" aria-label="Payout dashboard" className="lg:hidden"><Logo /></Link>
             <p className="hidden text-sm font-medium text-ink-soft lg:block">
-              {sections.find((section) => section.href === pathname)?.label ?? "Dashboard"}
+              {navSections.find((section) => section.href === pathname)?.label ?? "Dashboard"}
             </p>
             <Button variant="secondary" size="sm" className="lg:hidden" onClick={logout} loading={loggingOut}>
               {loggingOut ? null : <LogoutIcon className="h-4 w-4" />} Log out
             </Button>
           </div>
           <nav className="flex gap-1 overflow-x-auto px-3 pb-2 lg:hidden" aria-label="Dashboard">
-            {sections.map((section) => (
+            {navSections.map((section) => (
               <Link
                 key={section.href}
                 href={section.href}

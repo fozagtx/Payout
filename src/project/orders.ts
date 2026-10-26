@@ -1,8 +1,8 @@
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, notInArray, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import { PayPalApiError } from "./paypal/client.js";
 import { orders, users } from "./schema.js";
-import type { RefundEntry, RefundReason } from "./refund-types.js";
+import type { RefundEntry, RefundReason, RefundRequest } from "./refund-types.js";
 import type { Catalog, OrderLine, PaymentOrder, Payments, SelectedOptions, Services } from "./services.js";
 
 export { REFUND_REASONS } from "./refund-types.js";
@@ -59,6 +59,7 @@ export const orderListView = (row: OrderRow) => ({
     ? { id: row.disputeId, status: row.disputeStatus, reason: row.disputeReason }
     : null,
   refunds: row.refunds ?? [],
+  refundRequest: row.refundRequest ?? null,
   createdAt: row.createdAt.toISOString(),
 });
 
@@ -223,6 +224,15 @@ export async function listUserOrders(db: Database, userId: string, limit: number
   return db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt), desc(orders.id)).limit(limit);
 }
 
+export async function listAllOrders(db: Database, limit: number) {
+  return db
+    .select({ order: orders, buyer: users.username })
+    .from(orders)
+    .innerJoin(users, eq(orders.userId, users.id))
+    .orderBy(desc(orders.createdAt), desc(orders.id))
+    .limit(limit);
+}
+
 function statusFromPayPal(payment: PaymentOrder): OrderStatus {
   switch (payment.status) {
     case "VOIDED":
@@ -316,6 +326,55 @@ export async function recordRefund(db: Database, orderId: string, input: Omit<Re
       .where(eq(orders.id, orderId))
       .returning();
     return updated ?? row;
+  });
+}
+
+export async function requestRefund(
+  db: Database,
+  row: OrderRow,
+  input: { amountCents?: number; reason: RefundReason; note?: string }
+) {
+  return db.transaction(async (transaction) => {
+    const [current] = await transaction.select().from(orders).where(eq(orders.id, row.id)).for("update");
+    if (!current) throw new OrderError("order_not_found", "Order not found.");
+    if (current.status !== "COMPLETED" && current.status !== "PARTIALLY_REFUNDED") {
+      throw new OrderError("not_refundable", "Only paid orders can be refunded.");
+    }
+    if (current.refundRequest?.status === "pending") {
+      throw new OrderError("request_pending", "A refund request is already waiting for the store.");
+    }
+    const remaining = remainingRefundCents(current);
+    const amount = input.amountCents ?? remaining;
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > remaining) {
+      throw new OrderError("invalid_amount", `Refund between $0.01 and ${formatUsdCents(remaining)}.`);
+    }
+    const refundRequest: RefundRequest = {
+      amountCents: amount,
+      reason: input.reason,
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      status: "pending",
+      requestedAt: new Date().toISOString(),
+    };
+    const [updated] = await transaction.update(orders)
+      .set({ refundRequest, updatedAt: new Date() })
+      .where(eq(orders.id, current.id))
+      .returning();
+    return updated ?? current;
+  });
+}
+
+export async function cancelRefundRequest(db: Database, row: OrderRow) {
+  return db.transaction(async (transaction) => {
+    const [current] = await transaction.select().from(orders).where(eq(orders.id, row.id)).for("update");
+    if (!current || current.refundRequest?.status !== "pending") {
+      throw new OrderError("no_pending_request", "There is no pending refund request.");
+    }
+    const refundRequest = { ...current.refundRequest, status: "cancelled" as const, decidedAt: new Date().toISOString() };
+    const [updated] = await transaction.update(orders)
+      .set({ refundRequest, updatedAt: new Date() })
+      .where(eq(orders.id, current.id))
+      .returning();
+    return updated ?? current;
   });
 }
 

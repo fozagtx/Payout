@@ -38,7 +38,7 @@ export function EarningsCard() {
         </div>
       ) : state.status === "error" ? (
         <div className="px-5 py-7 text-center sm:px-6">
-          <p className="text-sm text-ink-soft">We couldn’t load earnings. {state.message}</p>
+          <p className="text-sm text-ink-soft">{state.message === "Only the store owner can see this." ? state.message : `We couldn’t load earnings. ${state.message}`}</p>
           <Button variant="secondary" size="sm" className="mt-3" onClick={() => void load()}>Try again</Button>
         </div>
       ) : (
