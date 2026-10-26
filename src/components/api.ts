@@ -26,6 +26,7 @@ export type Order = {
   totalCents: number;
   currency: string;
   items: OrderItem[];
+  dispute?: { id: string; status: string | null; reason: string | null } | null;
   shipping?: ShippingAddress | null;
   createdAt?: string;
 };

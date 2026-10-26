@@ -39,7 +39,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
   const local = Boolean(url) && !isPublicHttps(url);
 
   return (
-    <Card id="connect">
+    <Card>
       <CardHeader
         icon={<PlugIcon />}
         title="Connect to Claude"

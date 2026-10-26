@@ -21,6 +21,9 @@ const sdkProduct = (id: string, price = 42): Product => ({
 
 const searches: StorefrontSearch[] = [];
 const retrieves: { id: string; options?: SelectedOptions }[] = [];
+const lookups: string[] = [];
+const earningsCalls: { userId?: string; days?: number }[] = [];
+const tracking = { started: [] as string[], stopped: [] as string[] };
 const storefront: Storefront = {
   async search(input) {
     searches.push(input);
@@ -39,15 +42,35 @@ const storefront: Storefront = {
   websites: async () => [],
   categories: async () => [],
   category: async () => undefined,
+  async lookup(url) {
+    lookups.push(url);
+    return url.includes("missing") ? undefined : sdkProduct("linked-product", 25);
+  },
+  async startTracking(productId) {
+    tracking.started.push(productId);
+  },
+  async stopTracking(productId) {
+    tracking.stopped.push(productId);
+  },
+  async earnings(userId, days) {
+    earningsCalls.push({ ...(userId ? { userId } : {}), ...(days === undefined ? {} : { days }) });
+    return {
+      clicks: 8,
+      sales: 2,
+      transactions: [{ date: "2026-10-01T00:00:00.000Z", merchant: "Acme", saleAmount: 40, commission: 4, currency: "USD", status: "PAID" }],
+      totals: { sales: 40, commission: 4, currency: "USD" },
+    };
+  },
 };
 
 let server: TestServer;
 let token: string;
 const paypal = fakePayments();
+let userId: string;
 
 beforeAll(async () => {
   server = await startServer({ storefront, catalog: fakeCatalog(), payments: paypal.payments });
-  const { userId } = await signUp(server.baseUrl, "claude_user");
+  ({ userId } = await signUp(server.baseUrl, "claude_user"));
   token = (await issueAccessToken(server.db, server.baseUrl, userId)).token;
 });
 afterAll(() => server.close());
@@ -56,7 +79,7 @@ describe("Channel3 MCP tools", () => {
   it("lists the new tools, with the grid UI on find_similar_products", async () => {
     const { tools } = await mcpCall(server.baseUrl, token, "tools/list");
     const names = tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["get_product_details", "find_similar_products"]));
+    expect(names).toEqual(expect.arrayContaining(["get_product_details", "find_similar_products", "compare_link", "list_disputes", "get_earnings"]));
     expect(tools.find((t: any) => t.name === "find_similar_products")._meta["ui/resourceUri"]).toBeDefined();
     expect(tools.find((t: any) => t.name === "search_products").inputSchema.properties).toHaveProperty("image_url");
   });
@@ -84,6 +107,15 @@ describe("Channel3 MCP tools", () => {
     expect(data.code).toBe("product_not_found");
   });
 
+  it("compare_link shares the detailed product shape and orders stores cheapest first", async () => {
+    const { data, isError } = await callTool(server.baseUrl, token, "compare_link", { url: "https://store.example/item" });
+    expect(isError).toBe(false);
+    expect(lookups.at(-1)).toBe("https://store.example/item");
+    expect(data.id).toBe("linked-product");
+    expect(data.offers.map((offer: any) => offer.store)).toEqual(["cheap.example", "pricey.example"]);
+    expect(data.price_history.verdict).toBe("low");
+  });
+
   it("find_similar_products fills the grid", async () => {
     const { data, isError } = await callTool(server.baseUrl, token, "find_similar_products", { product_id: "p1", max_price: 50 });
     expect(isError).toBe(false);
@@ -94,5 +126,37 @@ describe("Channel3 MCP tools", () => {
     const { data, isError } = await callTool(server.baseUrl, token, "create_checkout", { items: [{ product_id: "shoe", quantity: 1, options: { Size: "9" } }] });
     expect(isError).toBe(false);
     expect(data.order.items[0]).toMatchObject({ productId: "shoe", title: "Trail Runner Shoe (9)", options: { Size: "9" } });
+  });
+
+  it("lists disputes associated with the signed-in user's orders", async () => {
+    const { data: checkout } = await callTool(server.baseUrl, token, "create_checkout", { items: [{ product_id: "shoe", quantity: 1 }] });
+    paypal.approve(checkout.order.paypalOrderId);
+    await callTool(server.baseUrl, token, "get_order_status", { order_id: checkout.order.id });
+    paypal.seedDisputes([{
+      disputeId: "DISPUTE-MCP",
+      reason: "ITEM_NOT_RECEIVED",
+      status: "OPEN",
+      amountCents: 4999,
+      currency: "USD",
+      captureId: `CAP-${checkout.order.paypalOrderId}`,
+    }]);
+    const { data, isError } = await callTool(server.baseUrl, token, "list_disputes", {});
+    expect(isError).toBe(false);
+    expect(data.disputes).toEqual([
+      expect.objectContaining({
+        disputeId: "DISPUTE-MCP",
+        reason: "ITEM_NOT_RECEIVED",
+        status: "OPEN",
+        amountCents: 4999,
+        orderId: checkout.order.id,
+      }),
+    ]);
+  });
+
+  it("returns per-user Channel3 earnings", async () => {
+    const { data, isError } = await callTool(server.baseUrl, token, "get_earnings", { days: 14 });
+    expect(isError).toBe(false);
+    expect(data).toMatchObject({ clicks: 8, sales: 2, totals: { commission: 4, currency: "USD" } });
+    expect(earningsCalls.at(-1)).toEqual({ userId, days: 14 });
   });
 });

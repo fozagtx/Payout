@@ -80,6 +80,9 @@ pnpm dev                        # http://localhost:4000
 ```
 
 - **`CHANNEL3_API_KEY`**: get one at [trychannel3.com](https://trychannel3.com)
+- **`CHANNEL3_WEBHOOK_SECRET`** (optional): signing secret for Channel3 price and availability webhooks. Register `<PUBLIC_API_URL>/channel3/webhook` in the Channel3 dashboard.
+
+Channel3 earnings use `brand_name` as the merchant and the SDK's `order_amount` / `commission_amount` as dollar amounts. The current SDK transaction declaration has no currency field, so Payout uses a response currency when provided and otherwise falls back to USD, matching the storefront locale.
   (1,000 free credits a month). It powers Claude's search and the `/shop` page
   (text and photo search, filters, product pages with variants, store comparison,
   price history, similar products). Without a key, Claude gets a built-in demo

@@ -21,6 +21,8 @@ const sdkProduct = (id: string, extra: Partial<Product> = {}): Product => ({
 function fakeStorefront() {
   const searches: StorefrontSearch[] = [];
   const resolves: { id: string; selection?: SelectedOptions }[] = [];
+  const lookups: { url: string; userId?: string }[] = [];
+  const tracking = { started: [] as string[], stopped: [] as string[] };
   const storefront: Storefront = {
     async search(input) {
       searches.push(input);
@@ -40,8 +42,21 @@ function fakeStorefront() {
     websites: async () => [],
     categories: async () => [],
     category: async () => undefined,
+    async lookup(url, userId) {
+      lookups.push({ url, ...(userId ? { userId } : {}) });
+      return url.includes("missing") ? undefined : sdkProduct("lookup-result");
+    },
+    async startTracking(productId) {
+      tracking.started.push(productId);
+    },
+    async stopTracking(productId) {
+      tracking.stopped.push(productId);
+    },
+    async earnings() {
+      return { clicks: 3, sales: 1, transactions: [], totals: { sales: 40, commission: 2, currency: "USD" } };
+    },
   };
-  return { storefront, searches, resolves };
+  return { storefront, searches, resolves, lookups, tracking };
 }
 
 const catalogGets: { id: string; options?: SelectedOptions }[] = [];
@@ -126,6 +141,20 @@ describe("POST /api/shop/search", () => {
     const response = await post("/api/shop/search", { query: "  " });
     expect(response.status).toBe(400);
     expect((await response.json()).error).toBe("invalid_request");
+  });
+});
+
+describe("POST /api/shop/lookup", () => {
+  it("returns a product from the requested link and attributes it to the signed-in user", async () => {
+    const response = await post("/api/shop/lookup", { url: "https://shop.example/product" }, { cookie });
+    expect(response.status).toBe(200);
+    expect((await response.json()).product.id).toBe("lookup-result");
+    expect(fake.lookups.at(-1)).toMatchObject({ url: "https://shop.example/product", userId: expect.any(String) });
+  });
+
+  it("returns 404 for unknown links and rejects non-http URLs", async () => {
+    expect((await post("/api/shop/lookup", { url: "https://shop.example/missing" })).status).toBe(404);
+    expect((await post("/api/shop/lookup", { url: "ftp://shop.example/product" })).status).toBe(400);
   });
 });
 

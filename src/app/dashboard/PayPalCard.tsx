@@ -44,7 +44,7 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
   }
 
   return (
-    <Card id="paypal">
+    <Card>
       <CardHeader
         icon={<PayPalMark className="h-5 w-5" />}
         title="PayPal"

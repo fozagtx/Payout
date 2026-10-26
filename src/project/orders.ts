@@ -47,6 +47,9 @@ export function orderView(row: OrderRow): OrderView {
 export const orderListView = (row: OrderRow) => ({
   ...orderView(row),
   shipping: (row.shipping as Record<string, string> | null) ?? null,
+  dispute: row.disputeId
+    ? { id: row.disputeId, status: row.disputeStatus, reason: row.disputeReason }
+    : null,
   createdAt: row.createdAt.toISOString(),
 });
 

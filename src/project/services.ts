@@ -91,6 +91,18 @@ export interface Refund {
   status: string;
 }
 
+export interface Dispute {
+  disputeId: string;
+  reason: string;
+  status: string;
+  stage?: string;
+  amountCents: number;
+  currency: string;
+  captureId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** The headers and parsed body of a PayPal webhook delivery. */
 export interface WebhookDelivery {
   headers: Record<string, string | undefined>;
@@ -103,6 +115,7 @@ export interface Payments {
   captureOrder(paypalOrderId: string): Promise<PaymentOrder>;
   /** Refunds a capture in full. `requestId` makes retries idempotent. */
   refundCapture(captureId: string, requestId: string): Promise<Refund>;
+  listDisputes(): Promise<Dispute[]>;
   /** Asks PayPal whether a webhook delivery is genuine. False when no webhook id is configured. */
   verifyWebhook(delivery: WebhookDelivery): Promise<boolean>;
 }

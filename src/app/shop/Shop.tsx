@@ -8,7 +8,7 @@ import type { SearchFetcher } from "@/hooks/use-product-search.js";
 import { Footer, Header } from "@/components/Header.js";
 import { AlertIcon } from "@/components/Icons.js";
 import { ProductView } from "./ProductView.js";
-import { fetchSearch, getCategory, searchBrands, searchCategories, searchWebsites, shopStatus } from "./shop-api.js";
+import { fetchLookup, fetchSearch, getCategory, searchBrands, searchCategories, searchWebsites, ShopError, shopStatus } from "./shop-api.js";
 
 const productFromUrl = () => new URLSearchParams(window.location.search).get("product");
 
@@ -44,6 +44,26 @@ function ShopPage() {
 
   const search: SearchFetcher = useCallback(async (input) => {
     try {
+      const query = input.query?.trim() ?? "";
+      if (!input.imageUrl && !input.base64Image && /^https?:\/\//i.test(query)) {
+        let product: Product;
+        try {
+          product = await fetchLookup(query);
+        } catch (error) {
+          if (error instanceof ShopError && error.status === 404) {
+            setSearchError("We couldn't find that product link in Channel3's catalog.");
+            return { products: [], nextPageToken: null };
+          }
+          throw error;
+        }
+        if (!product) {
+          setSearchError("We couldn't find that product link in Channel3's catalog.");
+          return { products: [], nextPageToken: null };
+        }
+        setSearchError(null);
+        open(product);
+        return { products: [product], nextPageToken: null };
+      }
       const page = await fetchSearch(input);
       setSearchError(null);
       return page;
@@ -51,7 +71,7 @@ function ShopPage() {
       setSearchError(error instanceof Error ? error.message : "Search failed.");
       throw error;
     }
-  }, []);
+  }, [open]);
 
   const ready = status.data?.search === true;
 
@@ -95,7 +115,7 @@ function ShopPage() {
                   getCategory={getCategory}
                   filtersLayout="bar"
                   imageSearch
-                  placeholder="Search products, or drop in a photo"
+                  placeholder="Search products, paste a store link, or drop in a photo"
                   onSelect={open}
                   locale="en-US"
                 />

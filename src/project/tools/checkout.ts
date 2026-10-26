@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import type { Database } from "../../db/client.js";
 import { logTool, result } from "../../mcp-kit/index.js";
@@ -15,6 +16,7 @@ import {
 } from "../orders.js";
 import { formatCents } from "../paypal/client.js";
 import type { Services } from "../services.js";
+import { orders } from "../schema.js";
 import { SHOP_WIDGET_URI } from "../ui/resource.js";
 import { toolContext } from "./context.js";
 
@@ -147,6 +149,80 @@ export function registerCheckoutTools(server: McpServer, db: Database, services:
       const rows = await listUserOrders(db, context.userId, args.limit);
       await logTool(db, context.connectionId, "list_orders", args, "allowed");
       return result({ orders: rows.map(orderListView) });
+    }
+  );
+
+  server.registerTool(
+    "list_disputes",
+    {
+      title: "List PayPal disputes",
+      description: "List PayPal disputes associated with your orders, including the dispute reason, status and amount.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (_args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "orders:read");
+      if (error) return result(error, true);
+      let allDisputes;
+      try {
+        allDisputes = await services.payments.listDisputes();
+      } catch (caught) {
+        const code = caught instanceof Error && caught.message === "paypal_not_configured" ? "paypal_not_configured" : "paypal_error";
+        const message = code === "paypal_not_configured"
+          ? "PayPal isn't configured on this server yet (missing sandbox credentials)."
+          : "PayPal disputes are unavailable right now.";
+        await logTool(db, context.connectionId, "list_disputes", {}, "error", code);
+        return result({ code, message }, true);
+      }
+      const userOrders = await db.select().from(orders).where(eq(orders.userId, context.userId));
+      const byCaptureId = new Map(userOrders.filter((order) => order.captureId).map((order) => [order.captureId!, order]));
+      const disputes = allDisputes.flatMap((dispute) => {
+        const order = dispute.captureId ? byCaptureId.get(dispute.captureId) : undefined;
+        return order ? [{ ...dispute, orderId: order.id }] : [];
+      });
+      for (const dispute of disputes) {
+        await db
+          .update(orders)
+          .set({ disputeId: dispute.disputeId, disputeStatus: dispute.status, disputeReason: dispute.reason, updatedAt: new Date() })
+          .where(eq(orders.id, dispute.orderId));
+      }
+      await logTool(db, context.connectionId, "list_disputes", {}, "allowed");
+      const summary = disputes.length
+        ? `Found ${disputes.length} PayPal dispute${disputes.length === 1 ? "" : "s"} associated with your orders.`
+        : "No PayPal disputes are associated with your orders.";
+      return {
+        content: [{ type: "text" as const, text: `${summary}\n${JSON.stringify({ disputes })}` }],
+        structuredContent: { disputes },
+      };
+    }
+  );
+
+  server.registerTool(
+    "get_earnings",
+    {
+      title: "Get Channel3 earnings",
+      description: "Show your Channel3 clicks, sales and commission for a recent reporting window.",
+      inputSchema: { days: z.number().int().min(1).max(90).default(30).describe("Reporting window in days, from 1 to 90.") },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "orders:read");
+      if (error) return result(error, true);
+      if (!services.storefront) {
+        return result({ code: "search_not_configured", message: "Earnings reporting needs CHANNEL3_API_KEY on the Payout server." }, true);
+      }
+      try {
+        const earnings = await services.storefront.earnings(context.userId, args.days);
+        await logTool(db, context.connectionId, "get_earnings", args, "allowed");
+        const summary = `${earnings.clicks} clicks, ${earnings.sales} sales, ${earnings.totals.commission.toFixed(2)} ${earnings.totals.currency} commission in the last ${args.days} days. Channel3 reporting may lag.`;
+        return {
+          content: [{ type: "text" as const, text: `${summary}\n${JSON.stringify(earnings)}` }],
+          structuredContent: earnings,
+        };
+      } catch (caught) {
+        await logTool(db, context.connectionId, "get_earnings", args, "error", caught instanceof Error ? caught.message : String(caught));
+        return result({ code: "reporting_unavailable", message: "Channel3 earnings are unavailable right now." }, true);
+      }
     }
   );
 }

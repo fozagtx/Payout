@@ -79,6 +79,7 @@ describe("createPayPalPayments", () => {
     await expect(payments.createOrder(input)).rejects.toThrow("paypal_not_configured");
     await expect(payments.getOrder("X")).rejects.toThrow("paypal_not_configured");
     await expect(payments.captureOrder("X")).rejects.toThrow("paypal_not_configured");
+    await expect(payments.listDisputes()).rejects.toThrow("paypal_not_configured");
     const halfConfigured = createPayPalPayments({ clientId: "id", baseUrl: BASE, fetch: fake.fetch });
     await expect(halfConfigured.getOrder("X")).rejects.toThrow("paypal_not_configured");
     expect(fake.calls).toHaveLength(0);
@@ -230,5 +231,36 @@ describe("createPayPalPayments", () => {
       payments.createOrder({ ...input, lines: [{ productId: "p", title: "t", quantity: 1, unitCents: 9.99 }] })
     ).rejects.toThrow();
     expect(apiCalls()).toHaveLength(0);
+  });
+
+  it("lists PayPal disputes with exact cents and the related capture id", async () => {
+    const { payments, apiCalls } = paypal(() => ({
+      body: {
+        items: [{
+          dispute_id: "PP-DISPUTE-1",
+          reason: "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+          status: "OPEN",
+          dispute_life_cycle_stage: "INQUIRY",
+          dispute_amount: { currency_code: "USD", value: "123.45" },
+          disputed_transactions: [{ seller_transaction_id: "CAPTURE-1" }],
+          create_time: "2026-01-02T03:04:05Z",
+          update_time: "2026-01-03T03:04:05Z",
+        }],
+      },
+    }));
+
+    expect(await payments.listDisputes()).toEqual([{
+      disputeId: "PP-DISPUTE-1",
+      reason: "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
+      status: "OPEN",
+      stage: "INQUIRY",
+      amountCents: 12345,
+      currency: "USD",
+      captureId: "CAPTURE-1",
+      createdAt: "2026-01-02T03:04:05Z",
+      updatedAt: "2026-01-03T03:04:05Z",
+    }]);
+    expect(apiCalls()[0]!.url).toBe(`${BASE}/v1/customer/disputes?page_size=50`);
+    expect(apiCalls()[0]!.method).toBe("GET");
   });
 });

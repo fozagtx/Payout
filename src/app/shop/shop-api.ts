@@ -41,6 +41,7 @@ function withDates(history: PriceHistoryResponse | null): PriceHistoryResponse |
 export const shopStatus = () => request<{ search: boolean }>("/api/shop/status");
 
 export const fetchSearch: SearchFetcher = (input) => request<{ products: Product[]; nextPageToken: string | null }>("/api/shop/search", input);
+export const fetchLookup = async (url: string) => (await request<{ product: Product }>("/api/shop/lookup", { url })).product;
 
 export async function fetchProduct(productId: string) {
   const data = await request<{ product: Product; priceHistory: PriceHistoryResponse | null }>(`/api/shop/products/${encodeURIComponent(productId)}`);
@@ -67,3 +68,5 @@ export const getCategory = async (slug: string) => (await request<{ category: Ca
 
 export const startCheckout = (input: { productId: string; options?: Record<string, string> }) =>
   request<{ order: { id: string; approveUrl: string | null } }>("/api/shop/checkout", input);
+
+export const startWatch = (productId: string) => request<{ watch: { id: string } }>("/api/watches", { productId });

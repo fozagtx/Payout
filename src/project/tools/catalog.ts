@@ -1,10 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { and, eq } from "drizzle-orm";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod/v4";
+import type { PriceHistoryResponse, Product as Channel3Product } from "@channel3/sdk/resources";
 import type { Database } from "../../db/client.js";
+import { isInStock } from "../../lib/format.js";
 import { logTool, result } from "../../mcp-kit/index.js";
 import { signImageUrl } from "../api/images.js";
 import { normaliseProduct } from "../channel3/client.js";
+import { priceWatches } from "../schema.js";
 import type { Product, Services } from "../services.js";
 import { SHOP_WIDGET_URI } from "../ui/resource.js";
 import { renderShopWidgetHtml } from "../ui/shop-widget.js";
@@ -32,6 +36,27 @@ const NO_STOREFRONT = {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function productDetails(product: Channel3Product, history?: PriceHistoryResponse) {
+  const offers = [...(product.offers ?? [])]
+    .sort((a, b) => a.price.price - b.price.price)
+    .map((offer) => ({ store: offer.domain, price: offer.price.price, currency: offer.price.currency, availability: offer.availability, url: offer.url }));
+  const stats = history?.statistics;
+  return {
+    id: product.id,
+    title: product.title,
+    brand: product.brands?.[0]?.name ?? null,
+    options: (product.variants?.options ?? []).map((option) => ({
+      name: option.name,
+      values: option.values.filter((value) => value.exists).map((value) => ({ value: value.label, availability: value.available ?? null })),
+    })),
+    selected: product.variants?.selected ?? [],
+    offers,
+    price_history: stats
+      ? { low: stats.min_price, high: stats.max_price, typical: stats.mean, current: stats.current_price, verdict: stats.current_status, currency: stats.currency, days: 90 }
+      : null,
+  };
 }
 
 export function registerCatalogTools(server: McpServer, db: Database, services: Services) {
@@ -215,28 +240,131 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
           return result({ code: "product_not_found", product_id: args.product_id }, true);
         }
         await logTool(db, context.connectionId, "get_product_details", args, "allowed");
-        const offers = [...(product.offers ?? [])]
-          .sort((a, b) => a.price.price - b.price.price)
-          .map((offer) => ({ store: offer.domain, price: offer.price.price, currency: offer.price.currency, availability: offer.availability, url: offer.url }));
-        const stats = history?.statistics;
-        return result({
-          id: product.id,
-          title: product.title,
-          brand: product.brands?.[0]?.name ?? null,
-          options: (product.variants?.options ?? []).map((option) => ({
-            name: option.name,
-            values: option.values.filter((value) => value.exists).map((value) => ({ value: value.label, availability: value.available ?? null })),
-          })),
-          selected: product.variants?.selected ?? [],
-          offers,
-          price_history: stats
-            ? { low: stats.min_price, high: stats.max_price, typical: stats.mean, current: stats.current_price, verdict: stats.current_status, currency: stats.currency, days: 90 }
-            : null,
-        });
+        return result(productDetails(product, history));
       } catch (caught) {
         await logTool(db, context.connectionId, "get_product_details", args, "error", errorMessage(caught));
         return result({ code: "catalog_unavailable", message: "Product details are unavailable right now." }, true);
       }
+    }
+  );
+
+  server.registerTool(
+    "compare_link",
+    {
+      title: "Compare a store link",
+      description: "Look up a product link in Channel3's catalog and compare its current store offers, cheapest first.",
+      inputSchema: { url: z.url({ protocol: /^https?$/ }).max(2048).describe("An HTTP or HTTPS product page URL.") },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
+      if (error) return result(error, true);
+      if (!services.storefront) return result(NO_STOREFRONT, true);
+      try {
+        const product = await services.storefront.lookup(args.url, context.userId);
+        if (!product) {
+          await logTool(db, context.connectionId, "compare_link", args, "rejected", "product_not_found");
+          return result({ code: "product_not_found", message: "Channel3 couldn't find that product link in its catalog." }, true);
+        }
+        const history = await services.storefront.priceHistory(product.id).catch(() => undefined);
+        await logTool(db, context.connectionId, "compare_link", args, "allowed");
+        return result(productDetails(product, history));
+      } catch (caught) {
+        await logTool(db, context.connectionId, "compare_link", args, "error", errorMessage(caught));
+        return result({ code: "catalog_unavailable", message: "Product link comparison is unavailable right now." }, true);
+      }
+    }
+  );
+
+  server.registerTool(
+    "watch_price",
+    {
+      title: "Watch a product price",
+      description: "Create a dashboard alert for a product's price drop or back-in-stock event.",
+      inputSchema: {
+        product_id: z.string().min(1).max(512).describe("Product id from search_products or get_product_details."),
+        target_price: z.number().positive().max(1_000_000).optional().describe("Optional alert threshold in the product's currency."),
+      },
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async (args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
+      if (error) return result(error, true);
+      if (!services.storefront) return result(NO_STOREFRONT, true);
+      try {
+        const [existing] = await db
+          .select()
+          .from(priceWatches)
+          .where(and(eq(priceWatches.userId, context.userId), eq(priceWatches.productId, args.product_id)))
+          .limit(1);
+        if (existing) {
+          await logTool(db, context.connectionId, "watch_price", args, "allowed");
+          return result({ watch: existing });
+        }
+        const product = await services.storefront.product(args.product_id, undefined, context.userId);
+        if (!product) {
+          await logTool(db, context.connectionId, "watch_price", args, "rejected", "product_not_found");
+          return result({ code: "product_not_found", product_id: args.product_id }, true);
+        }
+        const bestOffer = [...(product.offers ?? [])]
+          .filter((offer) => isInStock(offer.availability))
+          .sort((left, right) => left.price.price - right.price.price)[0];
+        const tracked = await db.select({ id: priceWatches.id }).from(priceWatches).where(eq(priceWatches.productId, product.id)).limit(1);
+        const [watch] = await db
+          .insert(priceWatches)
+          .values({
+            userId: context.userId,
+            productId: product.id,
+            title: product.title,
+            imageUrl: product.images?.[0]?.cleaned_url ?? product.images?.[0]?.url ?? null,
+            currency: bestOffer?.price.currency.toUpperCase() ?? "USD",
+            targetCents: args.target_price === undefined ? null : Math.round(args.target_price * 100),
+            startCents: bestOffer ? Math.round(bestOffer.price.price * 100) : null,
+            lastCents: bestOffer ? Math.round(bestOffer.price.price * 100) : null,
+            lastInStock: Boolean(bestOffer),
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (!watch) {
+          const [concurrent] = await db
+            .select()
+            .from(priceWatches)
+            .where(and(eq(priceWatches.userId, context.userId), eq(priceWatches.productId, product.id)))
+            .limit(1);
+          await logTool(db, context.connectionId, "watch_price", args, "allowed");
+          return result({ watch: concurrent });
+        }
+        if (!tracked.length) {
+          try {
+            await services.storefront.startTracking(product.id);
+          } catch (caught) {
+            await db.delete(priceWatches).where(eq(priceWatches.id, watch.id));
+            throw caught;
+          }
+        }
+        await logTool(db, context.connectionId, "watch_price", args, "allowed");
+        return result({ watch });
+      } catch (caught) {
+        await logTool(db, context.connectionId, "watch_price", args, "error", errorMessage(caught));
+        return result({ code: "catalog_unavailable", message: "Couldn't start that price watch right now." }, true);
+      }
+    }
+  );
+
+  server.registerTool(
+    "list_price_watches",
+    {
+      title: "List price watches",
+      description: "List your active price watches and their latest alert messages.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async (_args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
+      if (error) return result(error, true);
+      const watches = await db.select().from(priceWatches).where(eq(priceWatches.userId, context.userId));
+      await logTool(db, context.connectionId, "list_price_watches", {}, "allowed");
+      return result({ watches });
     }
   );
 

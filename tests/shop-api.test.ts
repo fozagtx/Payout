@@ -101,7 +101,7 @@ describe("GET /api/orders", () => {
     expect(body.orders.length).toBeGreaterThanOrEqual(5);
     const first = body.orders[0];
     expect(Object.keys(first).sort()).toEqual(
-      ["approveUrl", "createdAt", "currency", "id", "items", "paypalOrderId", "shipping", "status", "totalCents"]
+      ["approveUrl", "createdAt", "currency", "dispute", "id", "items", "paypalOrderId", "shipping", "status", "totalCents"]
     );
     const times = body.orders.map((o: any) => Date.parse(o.createdAt));
     expect([...times].sort((x: number, y: number) => y - x)).toEqual(times);
@@ -192,5 +192,83 @@ describe("shipping, refunds and webhooks", () => {
     expect((await post("/paypal/webhook", refund, valid)).status).toBe(200);
     [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
     expect(row).toMatchObject({ status: "REFUNDED", refundId: "REF9" });
+  });
+
+  it("returns and persists only disputes tied to this user's captures", async () => {
+    const order = await paidOrder();
+    paypal.seedDisputes([
+      {
+        disputeId: "DISPUTE-1",
+        reason: "ITEM_NOT_RECEIVED",
+        status: "OPEN",
+        amountCents: 4999,
+        currency: "USD",
+        captureId: `CAP-${order.paypalOrderId}`,
+      },
+      {
+        disputeId: "DISPUTE-OTHER",
+        reason: "OTHER",
+        status: "OPEN",
+        amountCents: 100,
+        currency: "USD",
+        captureId: "CAP-not-owned",
+      },
+    ]);
+    const response = await get("/api/disputes", alice.cookie);
+    expect(response.status).toBe(200);
+    expect((await response.json()).disputes).toEqual([
+      {
+        disputeId: "DISPUTE-1",
+        reason: "ITEM_NOT_RECEIVED",
+        status: "OPEN",
+        amountCents: 4999,
+        currency: "USD",
+        captureId: `CAP-${order.paypalOrderId}`,
+        orderId: order.id,
+      },
+    ]);
+    const [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({ disputeId: "DISPUTE-1", disputeStatus: "OPEN", disputeReason: "ITEM_NOT_RECEIVED" });
+    expect(await (await get("/api/disputes", bob.cookie)).json()).toEqual({ disputes: [] });
+  });
+
+  it("saves a dispute received in a verified PayPal webhook", async () => {
+    const order = await paidOrder();
+    const response = await post(
+      "/paypal/webhook",
+      {
+        event_type: "CUSTOMER.DISPUTE.CREATED",
+        resource: {
+          dispute_id: "DISPUTE-WEBHOOK",
+          status: "OPEN",
+          reason: "DUPLICATE_TRANSACTION",
+          disputed_transactions: [{ seller_transaction_id: `CAP-${order.paypalOrderId}` }],
+        },
+      },
+      { "paypal-transmission-sig": "valid" }
+    );
+    expect(response.status).toBe(200);
+    let [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({
+      disputeId: "DISPUTE-WEBHOOK",
+      disputeStatus: "OPEN",
+      disputeReason: "DUPLICATE_TRANSACTION",
+    });
+    const update = await post(
+      "/paypal/webhook",
+      {
+        event_type: "CUSTOMER.DISPUTE.UPDATED",
+        resource: {
+          dispute_id: "DISPUTE-WEBHOOK",
+          status: "UNDER_REVIEW",
+          reason: "DUPLICATE_TRANSACTION",
+          disputed_transactions: [{ seller_transaction_id: `CAP-${order.paypalOrderId}` }],
+        },
+      },
+      { "paypal-transmission-sig": "valid" }
+    );
+    expect(update.status).toBe(200);
+    [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({ disputeId: "DISPUTE-WEBHOOK", disputeStatus: "UNDER_REVIEW" });
   });
 });
