@@ -11,7 +11,7 @@ export function HeroCtas({ center = false }: { center?: boolean }) {
     return (
       <div className={wrap}>
         <ButtonLink href="/dashboard" size="lg">
-          Open dashboard <ArrowRightIcon className="h-4 w-4" />
+          Go to dashboard <ArrowRightIcon className="h-4 w-4" />
         </ButtonLink>
         <span className="text-sm text-ink-soft">
           Signed in as <strong className="font-semibold text-ink">{me.user.username}</strong>

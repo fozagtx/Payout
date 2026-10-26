@@ -1,11 +1,12 @@
 "use client";
 
 import { Link } from "./Link.js";
-import { useSearchParams } from "next/navigation.js";
-import { useId, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation.js";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { api } from "./api.js";
 import { Button } from "./Button.js";
 import { AlertIcon, EyeIcon, EyeOffIcon, ShieldIcon } from "./Icons.js";
+import { useMe } from "./useMe.js";
 
 type Mode = "login" | "signup";
 
@@ -31,6 +32,11 @@ function cleanNext(raw: string | null) {
 export function AuthForm({ mode }: { mode: Mode }) {
   const params = useSearchParams();
   const next = cleanNext(params.get("next"));
+  const router = useRouter();
+  const me = useMe();
+  useEffect(() => {
+    if (me.status === "signed-in") router.replace(next ?? "/dashboard");
+  }, [me.status, next, router]);
   const fromConsent = next?.startsWith("/connect") ?? false;
   const id = useId();
 
@@ -40,15 +46,20 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [touched, setTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [serverErrorCode, setServerErrorCode] = useState<string | null>(null);
 
   const errors = touched ? validate(mode, username, password) : {};
   const isSignup = mode === "signup";
   const otherHref = `${isSignup ? "/login" : "/signup"}${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+  const signupHref = `/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+
+  if (me.status !== "signed-out") return <AuthFormFallback />;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
     setServerError(null);
+    setServerErrorCode(null);
     const found = validate(mode, username, password);
     if (found.username || found.password) return;
     setLoading(true);
@@ -63,6 +74,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     }
     setLoading(false);
     setServerError(result.message);
+    setServerErrorCode(result.error ?? null);
   }
 
   const inputClass = (invalid: boolean) =>
@@ -96,7 +108,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
             className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800"
           >
             <AlertIcon className="mt-px h-4 w-4" />
-            <span>{serverError}</span>
+            <span>
+              {serverError}
+              {serverErrorCode === "unknown_user" ? (
+                <>
+                  {" "}
+                  <Link href={signupHref} className="font-semibold underline underline-offset-2">
+                    Create account
+                  </Link>
+                </>
+              ) : null}
+            </span>
           </div>
         ) : null}
 

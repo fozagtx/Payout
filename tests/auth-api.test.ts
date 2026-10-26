@@ -22,15 +22,36 @@ describe("username + password auth", () => {
     expect(response.headers.get("set-cookie")).toMatch(/^mcp_session=.+HttpOnly/i);
   });
 
-  it("rejects a taken username and weak credentials", async () => {
-    expect((await post("/api/auth/signup", { username: "bob_1", password: "password123" })).status).toBe(409);
+  it("rejects an existing username with the wrong password and weak credentials", async () => {
+    const duplicate = await post("/api/auth/signup", { username: "bob_1", password: "different-password" });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toEqual({
+      error: "username_taken",
+      message: "That username is taken. If it's yours, log in instead.",
+    });
     expect((await post("/api/auth/signup", { username: "x", password: "password123" })).status).toBe(400);
     expect((await post("/api/auth/signup", { username: "carol", password: "short" })).status).toBe(400);
   });
 
+  it("logs into an existing account when signup is repeated with the same password", async () => {
+    const username = "repeat_user";
+    expect((await post("/api/auth/signup", { username, password: "password123" })).status).toBe(201);
+    const response = await post("/api/auth/signup", { username, password: "password123" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, next: "/dashboard" });
+    expect(response.headers.get("set-cookie")).toMatch(/^mcp_session=.+HttpOnly/i);
+  });
+
   it("logs in with the right password only, and keeps next on this site", async () => {
-    expect((await post("/api/auth/login", { username: "bob_1", password: "nope-nope" })).status).toBe(401);
-    expect((await post("/api/auth/login", { username: "nobody", password: "password123" })).status).toBe(401);
+    const wrongPassword = await post("/api/auth/login", { username: "bob_1", password: "nope-nope" });
+    expect(wrongPassword.status).toBe(401);
+    expect(await wrongPassword.json()).toMatchObject({ error: "invalid_login", message: "Wrong username or password." });
+    const unknownUser = await post("/api/auth/login", { username: "nobody", password: "password123" });
+    expect(unknownUser.status).toBe(401);
+    expect(await unknownUser.json()).toEqual({
+      error: "unknown_user",
+      message: "No account with that username. Create one — it takes a few seconds.",
+    });
     const ok = await post("/api/auth/login", { username: "bob_1", password: "password123", next: "/connect?requestId=abc" });
     expect(await ok.json()).toEqual({ ok: true, next: "/connect?requestId=abc" });
     const evil = await post("/api/auth/login", { username: "bob_1", password: "password123", next: "//evil.com" });

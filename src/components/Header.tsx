@@ -13,7 +13,7 @@ function AutoActions() {
   if (me.status === "signed-in")
     return (
       <ButtonLink href="/dashboard" size="md">
-        Open dashboard <ArrowRightIcon className="h-4 w-4" />
+        Go to dashboard <ArrowRightIcon className="h-4 w-4" />
       </ButtonLink>
     );
   return (
