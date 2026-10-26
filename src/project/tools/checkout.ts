@@ -64,6 +64,10 @@ export function registerCheckoutTools(server: McpServer, db: Database, services:
             z.object({
               product_id: z.string().min(1).max(512).describe("Product id from search_products."),
               quantity: z.number().int().min(1).max(MAX_QUANTITY).describe(`How many, 1 to ${MAX_QUANTITY}.`),
+              options: z
+                .record(z.string().min(1).max(100), z.string().min(1).max(200))
+                .optional()
+                .describe("Size/colour chosen with get_product_details, e.g. {\"Size\": \"10\"}. Prices that exact variant."),
             })
           )
           .min(1)

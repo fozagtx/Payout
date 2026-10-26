@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import type { Database } from "../../db/client.js";
 import { logTool, result } from "../../mcp-kit/index.js";
 import { signImageUrl } from "../api/images.js";
+import { normaliseProduct } from "../channel3/client.js";
 import type { Product, Services } from "../services.js";
 import { SHOP_WIDGET_URI } from "../ui/resource.js";
 import { renderShopWidgetHtml } from "../ui/shop-widget.js";
@@ -21,6 +22,13 @@ function formatPrice(cents: number, currency: string) {
     return `${(cents / 100).toFixed(2)} ${currency}`;
   }
 }
+
+const toCatalogProduct = (product: unknown) => normaliseProduct(product as Parameters<typeof normaliseProduct>[0]);
+
+const NO_STOREFRONT = {
+  code: "search_not_configured",
+  message: "This needs CHANNEL3_API_KEY on the Payout server.",
+};
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -83,6 +91,11 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
         query: z.string().min(1).max(200).describe("What to search for, e.g. \"wireless headphones\"."),
         max_price: z.number().positive().optional().describe("Maximum price per item in US dollars."),
         limit: z.number().int().min(1).max(12).default(8).describe("How many products to show (1-12, default 8)."),
+        image_url: z
+          .url({ protocol: /^https?$/ })
+          .max(2048)
+          .optional()
+          .describe("A public image URL to search by (photo or screenshot of the item). Combine with query for best results."),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
       _meta: UI_META,
@@ -90,13 +103,26 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
     async (args, extra) => {
       const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
       if (error) return result(error, true);
-      const logged = { query: args.query, max_price: args.max_price, limit: args.limit };
+      const logged = { query: args.query, max_price: args.max_price, limit: args.limit, image_url: args.image_url };
+      if (args.image_url && !services.storefront) {
+        return result({ code: "search_not_configured", message: "Image search needs CHANNEL3_API_KEY on the Payout server." }, true);
+      }
       let products: Product[];
       try {
-        products = await services.catalog.search(args.query, {
-          limit: args.limit,
-          ...(args.max_price !== undefined ? { maxPriceCents: Math.round(args.max_price * 100) } : {}),
-        });
+        if (args.image_url && services.storefront) {
+          const page = await services.storefront.search({
+            query: args.query,
+            imageUrl: args.image_url,
+            filters: { availability: ["InStock"], ...(args.max_price !== undefined ? { price: { max_price: args.max_price } } : {}) },
+            userId: context.userId,
+          });
+          products = page.products.map(toCatalogProduct).filter((p): p is Product => p !== undefined).slice(0, args.limit);
+        } else {
+          products = await services.catalog.search(args.query, {
+            limit: args.limit,
+            ...(args.max_price !== undefined ? { maxPriceCents: Math.round(args.max_price * 100) } : {}),
+          });
+        }
       } catch (caught) {
         const message = errorMessage(caught);
         await logTool(db, context.connectionId, "search_products", logged, "error", message);
@@ -157,6 +183,104 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
       }
       await logTool(db, context.connectionId, "get_product", args, "allowed");
       return result({ product: forCanvas(product) });
+    }
+  );
+  server.registerTool(
+    "get_product_details",
+    {
+      title: "Product details, sizes and store prices",
+      description:
+        "Full details for one product id: every size/colour option and whether it's in stock, every store selling it " +
+        "with price and stock (cheapest first), and the 90-day price history (low, high, typical, and whether today's " +
+        "price is a good deal). Pass selected_options (e.g. {\"Size\": \"10\", \"Color\": \"Navy\"}) to get that exact " +
+        "variant. Use it before checkout when the product has sizes or colours, and when the user asks which store is " +
+        "cheapest or whether it's a good price. Then pass the same options to create_checkout.",
+      inputSchema: {
+        product_id: z.string().min(1).max(512).describe("Product id from search_products or find_similar_products."),
+        selected_options: z.record(z.string().min(1).max(100), z.string().min(1).max(200)).optional().describe("Variant choice, option name to value."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async (args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
+      if (error) return result(error, true);
+      if (!services.storefront) return result(NO_STOREFRONT, true);
+      try {
+        const [product, history] = await Promise.all([
+          services.storefront.product(args.product_id, args.selected_options, context.userId),
+          services.storefront.priceHistory(args.product_id).catch(() => undefined),
+        ]);
+        if (!product) {
+          await logTool(db, context.connectionId, "get_product_details", args, "rejected", "product_not_found");
+          return result({ code: "product_not_found", product_id: args.product_id }, true);
+        }
+        await logTool(db, context.connectionId, "get_product_details", args, "allowed");
+        const offers = [...(product.offers ?? [])]
+          .sort((a, b) => a.price.price - b.price.price)
+          .map((offer) => ({ store: offer.domain, price: offer.price.price, currency: offer.price.currency, availability: offer.availability, url: offer.url }));
+        const stats = history?.statistics;
+        return result({
+          id: product.id,
+          title: product.title,
+          brand: product.brands?.[0]?.name ?? null,
+          options: (product.variants?.options ?? []).map((option) => ({
+            name: option.name,
+            values: option.values.filter((value) => value.exists).map((value) => ({ value: value.label, availability: value.available ?? null })),
+          })),
+          selected: product.variants?.selected ?? [],
+          offers,
+          price_history: stats
+            ? { low: stats.min_price, high: stats.max_price, typical: stats.mean, current: stats.current_price, verdict: stats.current_status, currency: stats.currency, days: 90 }
+            : null,
+        });
+      } catch (caught) {
+        await logTool(db, context.connectionId, "get_product_details", args, "error", errorMessage(caught));
+        return result({ code: "catalog_unavailable", message: "Product details are unavailable right now." }, true);
+      }
+    }
+  );
+
+  server.registerTool(
+    "find_similar_products",
+    {
+      title: "Find similar products",
+      description:
+        "Show products similar to one product id in the interactive grid, e.g. when the user wants alternatives, " +
+        "something cheaper, or more like an item. Optionally cap the price.",
+      inputSchema: {
+        product_id: z.string().min(1).max(512).describe("The product to find alternatives for."),
+        max_price: z.number().positive().optional().describe("Maximum price per item in US dollars."),
+        limit: z.number().int().min(1).max(12).default(8).describe("How many products to show (1-12, default 8)."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+      _meta: UI_META,
+    },
+    async (args, extra) => {
+      const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
+      if (error) return result(error, true);
+      if (!services.storefront) return result(NO_STOREFRONT, true);
+      let products: Product[];
+      try {
+        const similar = await services.storefront.similar(
+          args.product_id,
+          args.limit,
+          { availability: ["InStock"], ...(args.max_price !== undefined ? { price: { max_price: args.max_price } } : {}) },
+          context.userId
+        );
+        products = similar.map(toCatalogProduct).filter((p): p is Product => p !== undefined);
+      } catch (caught) {
+        await logTool(db, context.connectionId, "find_similar_products", args, "error", errorMessage(caught));
+        return result({ code: "catalog_unavailable", message: "Similar products are unavailable right now." }, true);
+      }
+      await logTool(db, context.connectionId, "find_similar_products", args, "allowed");
+      const lines = products.map((p, index) => `${index + 1}. ${p.title} · ${formatPrice(p.priceCents, p.currency)}${p.merchant ? ` at ${p.merchant}` : ""} · [id: ${p.id}]`);
+      const summary = products.length
+        ? `Found ${products.length} similar product${products.length === 1 ? "" : "s"}, shown in the interactive grid:\n${lines.join("\n")}`
+        : "No similar products found. Suggest a different search.";
+      return {
+        content: [{ type: "text" as const, text: summary }],
+        structuredContent: JSON.parse(JSON.stringify({ query: "Similar products", products: products.map(forCanvas) })) as Record<string, unknown>,
+      };
     }
   );
 }

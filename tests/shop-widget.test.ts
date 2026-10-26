@@ -108,7 +108,7 @@ describe("catalog tools over /mcp", () => {
     expect(search._meta.ui.resourceUri).toBe(SHOP_WIDGET_URI);
     expect(search._meta["ui/resourceUri"]).toBe(SHOP_WIDGET_URI);
     expect(search.description).toMatch(/PayPal/);
-    expect(Object.keys(search.inputSchema.properties).sort()).toEqual(["limit", "max_price", "query"]);
+    expect(Object.keys(search.inputSchema.properties).sort()).toEqual(["image_url", "limit", "max_price", "query"]);
     expect(tools.find((t: { name: string }) => t.name === "get_product")).toBeDefined();
   });
 
