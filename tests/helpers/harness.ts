@@ -29,6 +29,8 @@ const unusedPayments: Payments = {
   createOrder: async () => { throw new Error("payments not faked in this test"); },
   getOrder: async () => { throw new Error("payments not faked in this test"); },
   captureOrder: async () => { throw new Error("payments not faked in this test"); },
+  refundCapture: async () => { throw new Error("payments not faked in this test"); },
+  verifyWebhook: async () => { throw new Error("payments not faked in this test"); },
 };
 
 export interface TestServer {
@@ -53,6 +55,7 @@ export async function startServer(services: Partial<Omit<Services, "publicUrl">>
     catalog: services.catalog ?? unusedCatalog,
     payments: services.payments ?? unusedPayments,
     publicUrl: baseUrl,
+    ...(services.storefront ? { storefront: services.storefront } : {}),
     ...(services.imageSecret ? { imageSecret: services.imageSecret } : {}),
   });
   app.use(errorHandler);

@@ -99,7 +99,7 @@ export default function Home() {
                   <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-cream text-ink">
                     <step.icon className="h-[18px] w-[18px]" />
                   </span>
-                  <span className="font-mono text-xs text-muted">0{i + 1}</span>
+                  <span className="font-mono text-xs text-muted-foreground">0{i + 1}</span>
                 </div>
                 <h3 className="mt-5 font-semibold tracking-[-0.02em] text-ink">{step.title}</h3>
                 <p className="mt-1 text-sm leading-relaxed text-ink-soft">{step.body}</p>
@@ -139,7 +139,7 @@ export default function Home() {
             {builtWith.map((item) => (
               <div key={item.name} className="bg-paper px-5 py-6 text-center">
                 <p className="font-semibold tracking-[-0.02em] text-ink">{item.name}</p>
-                <p className="mt-1 font-mono text-[11px] tracking-wide text-muted uppercase">{item.detail}</p>
+                <p className="mt-1 font-mono text-[11px] tracking-wide text-muted-foreground uppercase">{item.detail}</p>
               </div>
             ))}
           </div>

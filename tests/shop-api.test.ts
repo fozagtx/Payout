@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { orders } from "../src/project/schema.js";
 import { callTool, issueAccessToken, signUp, startServer, type TestServer } from "./helpers/harness.js";
-import { fakeCatalog, fakePayments } from "./helpers/shop-fakes.js";
+import { SHIPPING, fakeCatalog, fakePayments } from "./helpers/shop-fakes.js";
 
 const paypal = fakePayments();
 let server: TestServer;
@@ -101,7 +101,7 @@ describe("GET /api/orders", () => {
     expect(body.orders.length).toBeGreaterThanOrEqual(5);
     const first = body.orders[0];
     expect(Object.keys(first).sort()).toEqual(
-      ["approveUrl", "createdAt", "currency", "id", "items", "paypalOrderId", "status", "totalCents"]
+      ["approveUrl", "createdAt", "currency", "id", "items", "paypalOrderId", "shipping", "status", "totalCents"]
     );
     const times = body.orders.map((o: any) => Date.parse(o.createdAt));
     expect([...times].sort((x: number, y: number) => y - x)).toEqual(times);
@@ -128,5 +128,69 @@ describe("GET /api/orders/:id/public", () => {
   it("404s unknown or malformed ids", async () => {
     expect((await get(`/api/orders/${crypto.randomUUID()}/public`)).status).toBe(404);
     expect((await get("/api/orders/nope/public")).status).toBe(404);
+  });
+});
+
+describe("shipping, refunds and webhooks", () => {
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${server.baseUrl}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+
+  async function paidOrder() {
+    const order = await newOrder();
+    paypal.approve(order.paypalOrderId);
+    await get(`/paypal/return?token=${order.paypalOrderId}`);
+    return order;
+  }
+
+  it("saves the address the buyer chose on PayPal and shows it to the owner", async () => {
+    const order = await paidOrder();
+    const body = await (await get("/api/orders", alice.cookie)).json();
+    expect(body.orders.find((o: any) => o.id === order.id).shipping).toEqual(SHIPPING);
+    const pub = await (await get(`/api/orders/${order.id}/public`)).json();
+    expect(pub.order).not.toHaveProperty("shipping");
+  });
+
+  it("refunds a paid order once, and only for its owner", async () => {
+    const order = await paidOrder();
+    expect((await post(`/api/orders/${order.id}/refund`, {})).status).toBe(401);
+    expect((await post(`/api/orders/${order.id}/refund`, {}, { cookie: bob.cookie })).status).toBe(404);
+    const response = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    expect(response.status).toBe(200);
+    expect((await response.json()).order.status).toBe("REFUNDED");
+    const again = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    expect((await again.json()).order.status).toBe("REFUNDED");
+    expect(paypal.calls.filter((c) => c.startsWith("refund:")).at(-1)).toBe(`refund:CAP-${order.paypalOrderId}:refund-${order.id}`);
+  });
+
+  it("won't refund an unpaid order", async () => {
+    const order = await newOrder();
+    const response = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe("not_refundable");
+  });
+
+  it("ignores webhooks PayPal can't verify", async () => {
+    const order = await newOrder();
+    paypal.approve(order.paypalOrderId);
+    const response = await post("/paypal/webhook", { event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: order.paypalOrderId } }, { "paypal-transmission-sig": "forged" });
+    expect(response.status).toBe(400);
+    const [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row!.status).toBe("PAYER_ACTION_REQUIRED");
+  });
+
+  it("captures on a verified approval webhook, then marks a webhook refund", async () => {
+    const order = await newOrder();
+    paypal.approve(order.paypalOrderId);
+    const valid = { "paypal-transmission-sig": "valid" };
+    expect((await post("/paypal/webhook", { event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: order.paypalOrderId } }, valid)).status).toBe(200);
+    let [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({ status: "COMPLETED", shipping: SHIPPING });
+    const refund = {
+      event_type: "PAYMENT.CAPTURE.REFUNDED",
+      resource: { id: "REF9", links: [{ rel: "up", href: `https://api.sandbox.paypal.com/v2/payments/captures/${row!.captureId}` }] },
+    };
+    expect((await post("/paypal/webhook", refund, valid)).status).toBe(200);
+    [row] = await server.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row).toMatchObject({ status: "REFUNDED", refundId: "REF9" });
   });
 });

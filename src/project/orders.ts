@@ -2,7 +2,7 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import { PayPalApiError } from "./paypal/client.js";
 import { orders, users } from "./schema.js";
-import type { Catalog, OrderLine, PaymentOrder, Payments, Services } from "./services.js";
+import type { Catalog, OrderLine, PaymentOrder, Payments, SelectedOptions, Services } from "./services.js";
 
 /**
  * Order logic shared by the MCP tools and the HTTP routes: building an order
@@ -10,9 +10,9 @@ import type { Catalog, OrderLine, PaymentOrder, Payments, Services } from "./ser
  * capturing it once the buyer approved.
  */
 
-export type OrderStatus = "CREATING" | "PAYER_ACTION_REQUIRED" | "CREATED" | "APPROVED" | "COMPLETED" | "CANCELLED" | "FAILED";
+export type OrderStatus = "CREATING" | "PAYER_ACTION_REQUIRED" | "CREATED" | "APPROVED" | "COMPLETED" | "REFUNDED" | "CANCELLED" | "FAILED";
 
-export const FINAL_STATUSES: readonly OrderStatus[] = ["COMPLETED", "CANCELLED", "FAILED"];
+export const FINAL_STATUSES: readonly OrderStatus[] = ["COMPLETED", "REFUNDED", "CANCELLED", "FAILED"];
 
 /** PayPal sandbox and the PayPal toolkit work in USD; so do we. */
 export const SUPPORTED_CURRENCY = "USD";
@@ -43,7 +43,12 @@ export function orderView(row: OrderRow): OrderView {
   };
 }
 
-export const orderListView = (row: OrderRow) => ({ ...orderView(row), createdAt: row.createdAt.toISOString() });
+/** The signed-in owner's view: also where PayPal will ship. */
+export const orderListView = (row: OrderRow) => ({
+  ...orderView(row),
+  shipping: (row.shipping as Record<string, string> | null) ?? null,
+  createdAt: row.createdAt.toISOString(),
+});
 
 /** What the public completion page may see: no PayPal ids or links. */
 export const publicOrderView = (row: OrderRow) => ({
@@ -89,16 +94,25 @@ export function paymentsError(error: unknown) {
  * Turns the requested product ids into order lines using the catalog's
  * current prices only. Duplicate ids are merged.
  */
-export async function priceItems(catalog: Catalog, items: { product_id: string; quantity: number }[]) {
-  const merged = new Map<string, number>();
-  for (const item of items) merged.set(item.product_id, (merged.get(item.product_id) ?? 0) + item.quantity);
+export type CheckoutItem = { product_id: string; quantity: number; options?: SelectedOptions };
+
+const optionsKey = (options: SelectedOptions = {}) => JSON.stringify(Object.entries(options).sort(([a], [b]) => a.localeCompare(b)));
+
+export async function priceItems(catalog: Catalog, items: CheckoutItem[]) {
+  const merged = new Map<string, { productId: string; options?: SelectedOptions; quantity: number }>();
+  for (const item of items) {
+    const key = `${item.product_id}\u0000${optionsKey(item.options)}`;
+    const existing = merged.get(key);
+    const options = item.options && Object.keys(item.options).length ? item.options : undefined;
+    merged.set(key, { productId: item.product_id, ...(options ? { options } : {}), quantity: (existing?.quantity ?? 0) + item.quantity });
+  }
 
   const lines: OrderLine[] = [];
-  for (const [productId, quantity] of merged) {
+  for (const { productId, options, quantity } of merged.values()) {
     if (quantity > MAX_QUANTITY) {
       throw new OrderError("invalid_quantity", `At most ${MAX_QUANTITY} of one product per order.`, { product_id: productId });
     }
-    const product = await catalog.get(productId);
+    const product = options ? await catalog.get(productId, options) : await catalog.get(productId);
     if (!product) throw new OrderError("product_not_found", `No product with id ${productId}. Search again and use an id from the results.`, { product_id: productId });
     if (!product.inStock) throw new OrderError("out_of_stock", `${product.title} is out of stock.`, { product_id: productId });
     if (product.currency.toUpperCase() !== SUPPORTED_CURRENCY) {
@@ -109,11 +123,12 @@ export async function priceItems(catalog: Catalog, items: { product_id: string; 
     }
     lines.push({
       productId,
-      title: product.title,
+      title: options ? `${product.title} (${Object.values(options).join(" / ")})` : product.title,
       quantity,
       unitCents: product.priceCents,
       ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
       ...(product.merchant ? { merchant: product.merchant } : {}),
+      ...(options ? { options } : {}),
     });
   }
   const totalCents = lines.reduce((sum, line) => sum + line.unitCents * line.quantity, 0);
@@ -133,7 +148,7 @@ async function updateOrder(db: Database, id: string, values: Partial<typeof orde
 export async function createCheckout(
   db: Database,
   services: Services,
-  input: { userId: string; connectionId: string | null; items: { product_id: string; quantity: number }[] }
+  input: { userId: string; connectionId: string | null; items: CheckoutItem[] }
 ) {
   const { lines, totalCents } = await priceItems(services.catalog, input.items);
   const [user] = await db.select({ paypalEmail: users.paypalEmail }).from(users).where(eq(users.id, input.userId)).limit(1);
@@ -221,12 +236,18 @@ export async function syncOrder(db: Database, payments: Payments, row: OrderRow,
     if (payment.status === "APPROVED" || payment.status === "SAVED") payment = await payments.captureOrder(row.paypalOrderId);
     const status = statusFromPayPal(payment);
     if (reopen && status !== "COMPLETED") return row;
-    const changed = status !== row.status || (payment.captureId ?? null) !== row.captureId;
+    const newShipping = Boolean(payment.shipping) && !row.shipping;
+    const changed = status !== row.status || (payment.captureId ?? null) !== row.captureId || newShipping;
     if (!changed) return row;
     // Never move a row off COMPLETED, even if two captures race.
     const [updated] = await db
       .update(orders)
-      .set({ status, captureId: payment.captureId ?? row.captureId, updatedAt: new Date() })
+      .set({
+        status,
+        captureId: payment.captureId ?? row.captureId,
+        ...(payment.shipping ? { shipping: payment.shipping } : {}),
+        updatedAt: new Date(),
+      })
       .where(and(eq(orders.id, row.id), notInArray(orders.status, reopen ? ["COMPLETED", "FAILED"] : [...FINAL_STATUSES])))
       .returning();
     return updated ?? (await findOrderById(db, row.id))!;
@@ -247,4 +268,34 @@ export async function cancelOrder(db: Database, orderId: string) {
     .where(and(eq(orders.id, orderId), notInArray(orders.status, [...FINAL_STATUSES])))
     .returning();
   return row ?? (await findOrderById(db, orderId));
+}
+
+export async function findOrderByCaptureId(db: Database, captureId: string) {
+  const [row] = await db.select().from(orders).where(eq(orders.captureId, captureId)).limit(1);
+  return row;
+}
+
+/** Marks a paid order REFUNDED (from our refund call or PayPal's refund webhook). */
+export async function markRefunded(db: Database, orderId: string, refundId: string | null) {
+  const [row] = await db
+    .update(orders)
+    .set({ status: "REFUNDED", ...(refundId ? { refundId } : {}), updatedAt: new Date() })
+    .where(and(eq(orders.id, orderId), eq(orders.status, "COMPLETED")))
+    .returning();
+  return row ?? (await findOrderById(db, orderId))!;
+}
+
+/** Refunds a paid order in full through PayPal. Throws OrderError. */
+export async function refundOrder(db: Database, payments: Payments, row: OrderRow) {
+  if (row.status === "REFUNDED") return row;
+  if (row.status !== "COMPLETED" || !row.captureId) {
+    throw new OrderError("not_refundable", "Only paid orders can be refunded.");
+  }
+  try {
+    const refund = await payments.refundCapture(row.captureId, `refund-${row.id}`);
+    return markRefunded(db, row.id, refund.refundId);
+  } catch (error) {
+    if (error instanceof PayPalApiError && error.issue === "CAPTURE_FULLY_REFUNDED") return markRefunded(db, row.id, null);
+    throw paymentsError(error);
+  }
 }

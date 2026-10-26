@@ -1,4 +1,4 @@
-import type { CreatePaymentInput, PayPalOrderStatus, PaymentOrder, Payments } from "../services.js";
+import type { CreatePaymentInput, PayPalOrderStatus, PaymentOrder, Payments, ShippingAddress } from "../services.js";
 
 /**
  * PayPal Orders v2 (sandbox unless configured otherwise): client-credentials
@@ -8,6 +8,8 @@ import type { CreatePaymentInput, PayPalOrderStatus, PaymentOrder, Payments } fr
 export interface PayPalOptions {
   clientId?: string;
   clientSecret?: string;
+  /** Webhook id from the PayPal app; without it webhook deliveries can't be verified. */
+  webhookId?: string;
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
 }
@@ -47,19 +49,50 @@ type PayPalOrderBody = {
   id?: string;
   status?: string;
   links?: { href?: string; rel?: string }[];
-  purchase_units?: { payments?: { captures?: { id?: string }[] } }[];
+  purchase_units?: {
+    payments?: { captures?: { id?: string }[] };
+    shipping?: {
+      name?: { full_name?: string };
+      address?: {
+        address_line_1?: string;
+        address_line_2?: string;
+        admin_area_2?: string;
+        admin_area_1?: string;
+        postal_code?: string;
+        country_code?: string;
+      };
+    };
+  }[];
 };
+
+function toShipping(unit: NonNullable<PayPalOrderBody["purchase_units"]>[number] | undefined): ShippingAddress | undefined {
+  const shipping = unit?.shipping;
+  if (!shipping?.address) return undefined;
+  const { address } = shipping;
+  const entries = {
+    name: shipping.name?.full_name,
+    line1: address.address_line_1,
+    line2: address.address_line_2,
+    city: address.admin_area_2,
+    state: address.admin_area_1,
+    postalCode: address.postal_code,
+    countryCode: address.country_code,
+  };
+  return Object.fromEntries(Object.entries(entries).filter(([, value]) => typeof value === "string" && value)) as ShippingAddress;
+}
 
 function toPaymentOrder(body: PayPalOrderBody, fallbackId?: string): PaymentOrder {
   const status = STATUSES.find((s) => s === body.status);
   if (!status) throw new Error(`unexpected PayPal order status: ${String(body.status)}`);
   const approve = body.links?.find((link) => link.rel === "payer-action") ?? body.links?.find((link) => link.rel === "approve");
   const captureId = body.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+  const shipping = toShipping(body.purchase_units?.[0]);
   return {
     paypalOrderId: body.id ?? fallbackId ?? "",
     status,
     ...(approve?.href ? { approveUrl: approve.href } : {}),
     ...(captureId ? { captureId } : {}),
+    ...(shipping ? { shipping } : {}),
   };
 }
 
@@ -113,7 +146,7 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
     return cached.token;
   }
 
-  async function api(method: "GET" | "POST", path: string, body?: unknown, requestId?: string): Promise<PayPalOrderBody> {
+  async function api<T = PayPalOrderBody>(method: "GET" | "POST", path: string, body?: unknown, requestId?: string): Promise<T> {
     const send = async () =>
       doFetch(`${baseUrl}${path}`, {
         method,
@@ -132,7 +165,7 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
       response = await send();
     }
     if (!response.ok) throw await errorFrom(response);
-    return (await response.json()) as PayPalOrderBody;
+    return (await response.json()) as T;
   }
 
   async function getOrder(paypalOrderId: string) {
@@ -179,7 +212,7 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
             experience_context: {
               brand_name: "Payout",
               user_action: "PAY_NOW",
-              shipping_preference: "NO_SHIPPING",
+              shipping_preference: "GET_FROM_FILE",
               return_url: input.returnUrl,
               cancel_url: input.cancelUrl,
             },
@@ -202,6 +235,33 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
         if (error instanceof PayPalApiError && error.issue === "ORDER_ALREADY_CAPTURED") return getOrder(paypalOrderId);
         throw error;
       }
+    },
+
+    async refundCapture(captureId: string, requestId: string) {
+      credentials();
+      const body = await api<{ id?: string; status?: string }>(
+        "POST",
+        `/v2/payments/captures/${encodeURIComponent(captureId)}/refund`,
+        {},
+        requestId
+      );
+      if (!body.id) throw new PayPalApiError(200, "invalid_refund_response");
+      return { refundId: body.id, status: body.status ?? "COMPLETED" };
+    },
+
+    async verifyWebhook({ headers, event }) {
+      if (!options.webhookId) return false;
+      credentials();
+      const body = await api<{ verification_status?: string }>("POST", "/v1/notifications/verify-webhook-signature", {
+        auth_algo: headers["paypal-auth-algo"],
+        cert_url: headers["paypal-cert-url"],
+        transmission_id: headers["paypal-transmission-id"],
+        transmission_sig: headers["paypal-transmission-sig"],
+        transmission_time: headers["paypal-transmission-time"],
+        webhook_id: options.webhookId,
+        webhook_event: event,
+      });
+      return body.verification_status === "SUCCESS";
     },
   };
 }

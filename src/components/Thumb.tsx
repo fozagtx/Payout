@@ -12,7 +12,7 @@ export function Thumb({ src, alt, className = "h-10 w-10" }: { src?: string | nu
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" onError={() => setFailed(true)} />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-muted">
+        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
           <BagIcon className="h-4 w-4" />
         </div>
       )}

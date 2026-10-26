@@ -61,7 +61,7 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
         {!editing && user.paypalEmail ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-cream px-4 py-3">
             <div className="min-w-0">
-              <p className="text-xs text-muted">Linked sandbox account</p>
+              <p className="text-xs text-muted-foreground">Linked sandbox account</p>
               <p className="truncate text-sm font-semibold text-ink">{user.paypalEmail}</p>
             </div>
             <div className="flex gap-2">

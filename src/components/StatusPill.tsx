@@ -12,7 +12,7 @@ const dots: Record<Tone, string> = {
   amber: "bg-amber-500",
   green: "bg-emerald-500",
   blue: "bg-brand",
-  slate: "bg-muted",
+  slate: "bg-muted-foreground",
   red: "bg-red-500",
 };
 
@@ -26,6 +26,8 @@ export function orderStatus(status: string): { label: string; tone: Tone; payabl
       return { label: "Approved", tone: "blue", payable: false };
     case "COMPLETED":
       return { label: "Paid", tone: "green", payable: false };
+    case "REFUNDED":
+      return { label: "Refunded", tone: "slate", payable: false };
     case "CANCELLED":
     case "CANCELED":
     case "VOIDED":

@@ -1,3 +1,5 @@
+import type { Storefront } from "./channel3/storefront.js";
+
 /**
  * The outside services the tools and API routes depend on. Real
  * implementations live in src/project/channel3/ and src/project/paypal/;
@@ -26,9 +28,13 @@ export interface SearchOptions {
   minPriceCents?: number;
 }
 
+/** A variant choice, `{ optionName: valueLabel }` (e.g. `{ Color: "Navy", Size: "10" }`). */
+export type SelectedOptions = Record<string, string>;
+
 export interface Catalog {
   search(query: string, options?: SearchOptions): Promise<Product[]>;
-  get(productId: string): Promise<Product | undefined>;
+  /** With `selectedOptions`, prices that exact variant. */
+  get(productId: string, selectedOptions?: SelectedOptions): Promise<Product | undefined>;
 }
 
 export interface OrderLine {
@@ -38,6 +44,7 @@ export interface OrderLine {
   unitCents: number;
   imageUrl?: string;
   merchant?: string;
+  options?: SelectedOptions;
 }
 
 export type PayPalOrderStatus =
@@ -65,16 +72,45 @@ export interface PaymentOrder {
   /** Where the buyer approves the payment (rel "payer-action" or "approve"). */
   approveUrl?: string;
   captureId?: string;
+  /** Where the buyer asked PayPal to ship (set once they approved). */
+  shipping?: ShippingAddress;
+}
+
+export interface ShippingAddress {
+  name?: string;
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  countryCode?: string;
+}
+
+export interface Refund {
+  refundId: string;
+  status: string;
+}
+
+/** The headers and parsed body of a PayPal webhook delivery. */
+export interface WebhookDelivery {
+  headers: Record<string, string | undefined>;
+  event: unknown;
 }
 
 export interface Payments {
   createOrder(input: CreatePaymentInput): Promise<PaymentOrder>;
   getOrder(paypalOrderId: string): Promise<PaymentOrder>;
   captureOrder(paypalOrderId: string): Promise<PaymentOrder>;
+  /** Refunds a capture in full. `requestId` makes retries idempotent. */
+  refundCapture(captureId: string, requestId: string): Promise<Refund>;
+  /** Asks PayPal whether a webhook delivery is genuine. False when no webhook id is configured. */
+  verifyWebhook(delivery: WebhookDelivery): Promise<boolean>;
 }
 
 export interface Services {
   catalog: Catalog;
+  /** The web storefront's Channel3 access (full SDK products). Unset without CHANNEL3_API_KEY. */
+  storefront?: Storefront;
   payments: Payments;
   /** Public origin, for PayPal return/cancel URLs. */
   publicUrl: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, type Order } from "@/components/api.js";
+import { api, type Order, type ShippingAddress } from "@/components/api.js";
 import { ButtonAnchor, Button } from "@/components/Button.js";
 import { Card, CardHeader } from "@/components/Card.js";
 import { formatDate, formatMoney } from "@/components/format.js";
@@ -11,8 +11,31 @@ import { orderStatus, StatusPill } from "@/components/StatusPill.js";
 
 type State = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; orders: Order[] };
 
+function shippingLine(shipping: ShippingAddress) {
+  return [shipping.name, shipping.line1, shipping.line2, [shipping.city, shipping.state, shipping.postalCode].filter(Boolean).join(" "), shipping.countryCode]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export function OrdersCard() {
   const [state, setState] = useState<State>({ status: "loading" });
+  const [refunding, setRefunding] = useState<string | null>(null);
+  const [refundError, setRefundError] = useState<{ id: string; message: string } | null>(null);
+
+  async function refund(order: Order) {
+    if (!window.confirm(`Refund ${formatMoney(order.totalCents, order.currency)} to the buyer's PayPal Sandbox account?`)) return;
+    setRefunding(order.id);
+    setRefundError(null);
+    const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund`, { method: "POST", body: {} });
+    setRefunding(null);
+    if (!result.ok) {
+      setRefundError({ id: order.id, message: result.message });
+      return;
+    }
+    setState((current) =>
+      current.status === "ready" ? { status: "ready", orders: current.orders.map((o) => (o.id === order.id ? result.data.order : o)) } : current
+    );
+  }
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -58,7 +81,7 @@ export function OrdersCard() {
               <BagIcon />
             </div>
             <p className="mt-3 text-sm font-semibold text-ink">No orders yet</p>
-            <p className="mx-auto mt-1 max-w-xs text-sm text-muted">
+            <p className="mx-auto mt-1 max-w-xs text-sm text-muted-foreground">
               Ask Claude to find something, pick it in the canvas and pay with PayPal. It’ll appear here.
             </p>
           </div>
@@ -82,9 +105,9 @@ export function OrdersCard() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-ink">
                           {first ? first.title : "Order"}
-                          {items.length > 1 ? <span className="font-normal text-muted"> + {items.length - 1} more</span> : null}
+                          {items.length > 1 ? <span className="font-normal text-muted-foreground"> + {items.length - 1} more</span> : null}
                         </p>
-                        <p className="line-clamp-2 text-xs text-muted">
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
                           {count} {count === 1 ? "item" : "items"}
                           {first?.merchant ? ` · ${first.merchant}` : ""}
                           {order.createdAt ? ` · ${formatDate(order.createdAt)}` : ""}
@@ -100,11 +123,24 @@ export function OrdersCard() {
                       </div>
                     </div>
                   </div>
+                  {order.shipping ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-ink-soft">Ships to</span> {shippingLine(order.shipping)}
+                    </p>
+                  ) : null}
                   {info.payable && order.approveUrl ? (
                     <div className="mt-3 flex justify-end">
                       <ButtonAnchor href={order.approveUrl} variant="paypal" size="sm">
                         Pay now
                       </ButtonAnchor>
+                    </div>
+                  ) : null}
+                  {order.status === "COMPLETED" ? (
+                    <div className="mt-3 flex items-center justify-end gap-3">
+                      {refundError?.id === order.id ? <span className="text-xs text-red-700">{refundError.message}</span> : null}
+                      <Button variant="secondary" size="sm" onClick={() => void refund(order)} loading={refunding === order.id}>
+                        Refund
+                      </Button>
                     </div>
                   ) : null}
                 </li>

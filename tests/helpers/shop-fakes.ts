@@ -20,7 +20,9 @@ export function fakeCatalog(products: Product[] = PRODUCTS): Catalog & { gets: s
   };
 }
 
-type FakeOrder = { status: PayPalOrderStatus; captureId?: string; input: CreatePaymentInput };
+type FakeOrder = { status: PayPalOrderStatus; captureId?: string; refunded?: boolean; input: CreatePaymentInput };
+
+export const SHIPPING = { name: "Alice Buyer", line1: "1 Main St", city: "San Jose", state: "CA", postalCode: "95131", countryCode: "US" };
 
 /** In-memory PayPal: orders start PAYER_ACTION_REQUIRED; approve() simulates the buyer. */
 export function fakePayments() {
@@ -38,6 +40,7 @@ export function fakePayments() {
       status: order.status,
       ...(order.status === "PAYER_ACTION_REQUIRED" ? { approveUrl: `https://sandbox.paypal.test/checkoutnow?token=${id}` } : {}),
       ...(order.captureId ? { captureId: order.captureId } : {}),
+      ...(order.status === "APPROVED" || order.status === "COMPLETED" ? { shipping: SHIPPING } : {}),
     };
   };
 
@@ -63,6 +66,18 @@ export function fakePayments() {
       order.status = "COMPLETED";
       order.captureId = `CAP-${id}`;
       return view(id);
+    },
+    async refundCapture(captureId, requestId) {
+      calls.push(`refund:${captureId}:${requestId}`);
+      const order = [...orders.values()].find((o) => o.captureId === captureId);
+      if (!order) throw new PayPalApiError(404, "RESOURCE_NOT_FOUND", "INVALID_RESOURCE_ID");
+      if (order.refunded) throw new PayPalApiError(422, "UNPROCESSABLE_ENTITY", "CAPTURE_FULLY_REFUNDED");
+      order.refunded = true;
+      return { refundId: `REF-${captureId}`, status: "COMPLETED" };
+    },
+    async verifyWebhook({ headers }) {
+      calls.push("verify-webhook");
+      return headers["paypal-transmission-sig"] === "valid";
     },
   };
 

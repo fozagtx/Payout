@@ -18,7 +18,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         <p className="mx-auto mt-2 max-w-md text-ink-soft">
           No worries, you weren’t charged. Your picks are still in the chat, so you can change them or check out again any time.
         </p>
-        {order ? <p className="mt-3 font-mono text-xs text-muted">Order {order}</p> : null}
+        {order ? <p className="mt-3 font-mono text-xs text-muted-foreground">Order {order}</p> : null}
         <p className="mt-6 flex items-center justify-center gap-2 text-sm text-ink-soft">
           <ChatIcon className="h-4 w-4" /> Return to Claude to keep shopping.
         </p>

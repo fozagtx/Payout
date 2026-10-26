@@ -68,7 +68,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const inputClass = (invalid: boolean) =>
     [
       "block w-full rounded-xl border bg-paper px-3.5 py-2.5 text-[15px] text-ink shadow-sm outline-none transition",
-      "placeholder:text-muted focus:ring-4",
+      "placeholder:text-muted-foreground focus:ring-4",
       invalid
         ? "border-red-400 focus:border-red-500 focus:ring-red-500/15"
         : "border-line-strong focus:border-ink focus:ring-ink/10",
@@ -126,7 +126,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 {errors.username}
               </p>
             ) : isSignup ? (
-              <p id={`${id}-username-hint`} className="mt-1.5 text-xs text-muted">
+              <p id={`${id}-username-hint`} className="mt-1.5 text-xs text-muted-foreground">
                 3–32 characters: a–z, 0–9 and _
               </p>
             ) : null}
@@ -154,7 +154,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-muted-foreground hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
               >
                 {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
               </button>
@@ -179,7 +179,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </p>
       </div>
 
-      <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted">
+      <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <ShieldIcon className="h-4 w-4" /> Payments are approved on PayPal. Payout never sees your card.
       </p>
     </div>

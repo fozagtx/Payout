@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ComponentType } from "react";
 import { Button } from "@/components/Button.js";
+import { Store } from "lucide-react";
 import { BagIcon, HomeIcon, LogoutIcon, PayPalMark, PlugIcon, SidebarIcon, type IconProps } from "@/components/Icons.js";
 import { Link } from "@/components/Link.js";
 import { Logo, LogoMark } from "@/components/Logo.js";
@@ -56,14 +57,14 @@ export function Sidebar({
           <Logo />
         )}
         {collapsed ? null : (
-          <button type="button" onClick={onToggle} aria-label="Collapse sidebar" className="rounded-lg p-1.5 text-muted hover:bg-ink/5 hover:text-ink">
+          <button type="button" onClick={onToggle} aria-label="Collapse sidebar" className="rounded-lg p-1.5 text-muted-foreground hover:bg-ink/5 hover:text-ink">
             <SidebarIcon className="h-[18px] w-[18px]" />
           </button>
         )}
       </div>
       {collapsed ? (
         <div className="flex justify-center pb-2">
-          <button type="button" onClick={onToggle} aria-label="Expand sidebar" className="rounded-lg p-1.5 text-muted hover:bg-ink/5 hover:text-ink">
+          <button type="button" onClick={onToggle} aria-label="Expand sidebar" className="rounded-lg p-1.5 text-muted-foreground hover:bg-ink/5 hover:text-ink">
             <SidebarIcon className="h-[18px] w-[18px]" />
           </button>
         </div>
@@ -77,6 +78,10 @@ export function Sidebar({
             {collapsed ? <span className="sr-only">{section.label}</span> : section.label}
           </a>
         ))}
+        <Link href="/shop" className={item} title={collapsed ? "Shop" : undefined}>
+          <Store className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+          {collapsed ? <span className="sr-only">Shop</span> : "Shop"}
+        </Link>
       </nav>
 
       <div className="border-t border-line p-3">

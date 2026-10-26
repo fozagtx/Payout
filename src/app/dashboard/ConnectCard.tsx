@@ -48,7 +48,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
       />
       <CardBody className="space-y-6">
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">Your MCP connector URL</label>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your MCP connector URL</label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-line bg-cream px-3.5 py-2.5 font-mono text-sm text-ink">
               {mcpUrl === null ? (
@@ -68,7 +68,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
               </span>
             </p>
           ) : (
-            <p className="mt-2 text-xs text-muted">The URL must be public HTTPS so Claude can reach it.</p>
+            <p className="mt-2 text-xs text-muted-foreground">The URL must be public HTTPS so Claude can reach it.</p>
           )}
         </div>
 
@@ -98,9 +98,9 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
             className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-ink hover:bg-cream focus-visible:outline-2 focus-visible:outline-ink"
           >
             <span className="flex items-center gap-2">
-              <TerminalIcon className="h-4 w-4 text-muted" /> Using Claude Code instead?
+              <TerminalIcon className="h-4 w-4 text-muted-foreground" /> Using Claude Code instead?
             </span>
-            <ChevronIcon className={`h-4 w-4 text-muted transition-transform ${codeOpen ? "rotate-180" : ""}`} />
+            <ChevronIcon className={`h-4 w-4 text-muted-foreground transition-transform ${codeOpen ? "rotate-180" : ""}`} />
           </button>
           {codeOpen ? (
             <div className="space-y-3 border-t border-line px-4 py-4">

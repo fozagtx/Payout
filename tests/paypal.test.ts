@@ -145,7 +145,7 @@ describe("createPayPalPayments", () => {
       experience_context: {
         brand_name: "Payout",
         user_action: "PAY_NOW",
-        shipping_preference: "NO_SHIPPING",
+        shipping_preference: "GET_FROM_FILE",
         return_url: input.returnUrl,
         cancel_url: input.cancelUrl,
       },
