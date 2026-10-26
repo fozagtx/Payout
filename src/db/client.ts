@@ -6,7 +6,7 @@ import { schema } from "./schema.js";
 export const DB_SCHEMA = "payout";
 
 export function createDatabase(connectionString = process.env.DATABASE_URL) {
-  if (!connectionString) throw new Error("DATABASE_URL is required");
+  if (!connectionString) throw new Error("DATABASE_URL is required: set it to your Postgres connection string (on Render, the Internal Database URL).");
   const pool = new Pool({ connectionString });
   pool.on("connect", (client) => {
     client.query(`SET search_path TO ${DB_SCHEMA}`).catch(() => {});
