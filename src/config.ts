@@ -10,6 +10,8 @@ export interface Config {
   paypal: {
     clientId?: string;
     clientSecret?: string;
+    /** Id of the webhook registered in the PayPal app; needed to verify webhook deliveries. */
+    webhookId?: string;
     /** Always sandbox unless PAYPAL_ENV=live. */
     baseUrl: string;
   };
@@ -38,6 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     paypal: {
       clientId: env.PAYPAL_CLIENT_ID || undefined,
       clientSecret: env.PAYPAL_CLIENT_SECRET || undefined,
+      webhookId: env.PAYPAL_WEBHOOK_ID || undefined,
       baseUrl: env.PAYPAL_ENV === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com",
     },
   };

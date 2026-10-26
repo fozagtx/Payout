@@ -80,11 +80,20 @@ pnpm dev                        # http://localhost:4000
 ```
 
 - **`CHANNEL3_API_KEY`**: get one at [trychannel3.com](https://trychannel3.com)
-  (1,000 free credits a month). Without a key, a built-in demo catalog is used,
-  so everything still runs.
+  (1,000 free credits a month). It powers Claude's search and the `/shop` page
+  (text and photo search, filters, product pages with variants, store comparison,
+  price history, similar products). Without a key, Claude gets a built-in demo
+  catalog and `/shop` says search isn't set up.
 - **`PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`**: from a sandbox REST app at
   [developer.paypal.com](https://developer.paypal.com/dashboard/applications/sandbox).
-  Pay with one of your sandbox *personal* accounts.
+  Pay with one of your sandbox *personal* accounts. PayPal asks the buyer for a
+  delivery address, which shows on the order in the dashboard, and paid orders
+  can be refunded from there.
+- **`PAYPAL_WEBHOOK_ID`** (optional): in the same sandbox app, add a webhook for
+  `<PUBLIC_API_URL>/paypal/webhook` with the events `CHECKOUT.ORDER.APPROVED`,
+  `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED` and
+  `PAYMENT.CAPTURE.REFUNDED`, then paste its id here. Orders then update on
+  their own even when the buyer closes the PayPal tab.
 
 Production: `pnpm build && pnpm start`. To deploy on Render, use the included
 `render.yaml` (a web service; it sets `PUBLIC_API_URL` from

@@ -80,7 +80,7 @@ export function Dashboard() {
 
   if (!user) {
     return (
-      <main className="flex flex-1 justify-center py-32 text-muted" role="status" aria-label="Loading">
+      <main className="flex flex-1 justify-center py-32 text-muted-foreground" role="status" aria-label="Loading">
         <Spinner className="h-6 w-6" />
       </main>
     );
@@ -106,6 +106,9 @@ export function Dashboard() {
                 <section.icon className="h-3.5 w-3.5" /> {section.label}
               </a>
             ))}
+            <a href="/shop" className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line bg-paper px-3 text-[13px] text-ink-soft">
+              Shop
+            </a>
           </nav>
         </header>
 
@@ -124,7 +127,7 @@ export function Dashboard() {
                   connected ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-line bg-paper text-ink-soft"
                 }`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted"}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-muted-foreground"}`} />
                 {connected ? "Claude connected" : "Not connected yet"}
               </span>
             </div>
@@ -141,7 +144,7 @@ export function Dashboard() {
             </div>
           </div>
         </main>
-        <footer className="border-t border-line px-4 py-6 font-mono text-[11px] tracking-wide text-muted uppercase sm:px-8">
+        <footer className="border-t border-line px-4 py-6 font-mono text-[11px] tracking-wide text-muted-foreground uppercase sm:px-8">
           PayPal Sandbox · no real money moves
         </footer>
       </div>

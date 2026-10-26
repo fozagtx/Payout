@@ -31,6 +31,9 @@ export const orders = pgTable(
     items: jsonb("items").notNull(),
     approveUrl: text("approve_url"),
     captureId: text("capture_id"),
+    /** Where the buyer asked PayPal to ship; copied from the order once approved. */
+    shipping: jsonb("shipping"),
+    refundId: text("refund_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

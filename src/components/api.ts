@@ -26,7 +26,18 @@ export type Order = {
   totalCents: number;
   currency: string;
   items: OrderItem[];
+  shipping?: ShippingAddress | null;
   createdAt?: string;
+};
+
+export type ShippingAddress = {
+  name?: string;
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  countryCode?: string;
 };
 
 export type ApiResult<T> = { ok: true; status: number; data: T } | { ok: false; status: number; message: string; error?: string };

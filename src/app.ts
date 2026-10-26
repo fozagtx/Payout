@@ -7,6 +7,7 @@ import { createAuthRouter } from "./project/api/auth.js";
 import { createConnectionsRouter } from "./project/api/connections.js";
 import { createImageRouter } from "./project/api/images.js";
 import { createShopRouter } from "./project/api/shop.js";
+import { createStorefrontRouter } from "./project/api/storefront.js";
 import { BRANDING } from "./project/branding.js";
 import { SCOPES } from "./project/scopes.js";
 import type { Services } from "./project/services.js";
@@ -41,6 +42,7 @@ export function createApp(db: Database, config: Config, services: Services) {
     allowLoopbackClientMetadata: !config.production && new URL(config.apiUrl).hostname === "localhost",
   });
   app.use(mcp.router);
+  app.use(createStorefrontRouter(db, session, services));
   app.use(createAuthRouter(db, session));
   app.use(createConnectionsRouter(session, mcp.provider, config.apiUrl));
   app.use(createShopRouter(db, session, services));

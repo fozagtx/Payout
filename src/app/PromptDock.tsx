@@ -31,7 +31,7 @@ export function PromptDock() {
         className="pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-full border border-line bg-paper/95 py-2.5 pr-3 pl-4 text-left shadow-[0_18px_40px_-18px_rgba(45,43,40,0.45)] backdrop-blur transition hover:border-line-strong focus-visible:outline-2 focus-visible:outline-ink"
       >
         <ClaudeMark className="h-5 w-5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-[15px] text-muted">{PROMPT}</span>
+        <span className="min-w-0 flex-1 truncate text-[15px] text-muted-foreground">{PROMPT}</span>
         <span className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-cream px-3 font-mono text-[11px] tracking-wide text-ink-soft uppercase">
           {copied ? (
             <>
@@ -44,7 +44,7 @@ export function PromptDock() {
           )}
         </span>
       </button>
-      <p className="mt-1.5 text-[11px] text-muted">Paste it into Claude once Payout is connected</p>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">Paste it into Claude once Payout is connected</p>
     </div>
   );
 }

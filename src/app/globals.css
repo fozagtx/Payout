@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* Light-only theme; `dark:` utilities apply only under an explicit .dark class. */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -22,7 +23,7 @@
   --color-ink: #2d2b28;
   --color-ink-900: #1c1b19;
   --color-ink-soft: #55524c;
-  --color-muted: #8b867c;
+  --color-muted-foreground: #8b867c;
   --color-line: #ebe5d9;
   --color-line-strong: #ddd5c6;
   --color-tan: #ecdfc8;
@@ -36,6 +37,36 @@
   --color-paypal-600: #f2b52a;
   --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* shadcn / Channel3 UI tokens, mapped onto the Payout palette. */
+@theme inline {
+  --color-background: var(--color-cream);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-paper);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-paper);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-ink);
+  --color-primary-foreground: var(--color-cream);
+  --color-secondary: #f3efe6;
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: #f3efe6;
+  --color-accent: #f3efe6;
+  --color-accent-foreground: var(--color-ink);
+  --color-destructive: #c2410c;
+  --color-border: var(--color-line);
+  --color-input: var(--color-line-strong);
+  --color-ring: var(--color-tan-ink);
+  --color-chart-1: var(--color-tan-ink);
+  --color-chart-2: var(--color-ink);
+  --color-chart-3: #6b8f71;
+  --color-chart-4: #3f7ee8;
+  --color-chart-5: #c2410c;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
 }
 
 :root {

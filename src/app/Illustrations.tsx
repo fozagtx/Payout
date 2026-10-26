@@ -123,7 +123,7 @@ export function CanvasPreview() {
         <span className="truncate text-[15px] text-ink">Running gear under $120</span>
       </div>
       <div className="mx-3 mt-3 overflow-hidden rounded-2xl border border-line bg-paper">
-        <div className="flex items-center justify-between border-b border-line bg-cream/70 px-4 py-2 font-mono text-[10.5px] tracking-wider text-muted uppercase">
+        <div className="flex items-center justify-between border-b border-line bg-cream/70 px-4 py-2 font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Product
           </span>
@@ -136,10 +136,10 @@ export function CanvasPreview() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-ink">{row.name}</p>
-              <p className="font-mono text-[10.5px] text-muted">{row.merchant}</p>
+              <p className="font-mono text-[10.5px] text-muted-foreground">{row.merchant}</p>
             </div>
             <span className="font-mono text-[13px] text-ink">{row.price}</span>
-            <span className={`flex h-5 w-5 items-center justify-center rounded-md text-[11px] ${row.picked ? "bg-ink text-cream" : "border border-line-strong text-muted"}`}>
+            <span className={`flex h-5 w-5 items-center justify-center rounded-md text-[11px] ${row.picked ? "bg-ink text-cream" : "border border-line-strong text-muted-foreground"}`}>
               {row.picked ? "✓" : "+"}
             </span>
           </div>
@@ -154,7 +154,7 @@ export function OrderPreview() {
   return (
     <div className="mx-auto w-full max-w-sm rounded-2xl border border-line bg-paper p-4 shadow-[0_10px_30px_-16px_rgba(45,43,40,0.35)]" aria-hidden="true">
       <div className="flex items-center justify-between">
-        <p className="font-mono text-[10.5px] tracking-wider text-muted uppercase">Order · 2 items</p>
+        <p className="font-mono text-[10.5px] tracking-wider text-muted-foreground uppercase">Order · 2 items</p>
         <span className="rounded-full bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800 ring-1 ring-amber-200">awaiting payment</span>
       </div>
       <div className="mt-3 space-y-2 font-mono text-[12px] text-ink-soft">

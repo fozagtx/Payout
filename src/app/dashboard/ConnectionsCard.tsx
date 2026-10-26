@@ -48,7 +48,7 @@ export function ConnectionsCard({ state, reload }: { state: ConnectionsState; re
         ) : state.connections.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center">
             <p className="text-sm font-medium text-ink-soft">No apps connected yet</p>
-            <p className="mt-1 text-xs text-muted">Follow the steps in “Connect to Claude” and it will show up here.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Follow the steps in “Connect to Claude” and it will show up here.</p>
           </div>
         ) : (
           <ul className="divide-y divide-line">
@@ -62,7 +62,7 @@ export function ConnectionsCard({ state, reload }: { state: ConnectionsState; re
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">{name}</p>
-                      <p className="truncate text-xs text-muted">
+                      <p className="truncate text-xs text-muted-foreground">
                         Since {formatShortDate(c.createdAt)}
                         {c.scopes?.length ? ` · ${c.scopes.join(", ")}` : ""}
                       </p>

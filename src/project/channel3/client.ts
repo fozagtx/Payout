@@ -1,4 +1,4 @@
-import type { Catalog, Product, SearchOptions } from "../services.js";
+import type { Catalog, Product, SearchOptions, SelectedOptions } from "../services.js";
 import { createDemoCatalog } from "./demo-catalog.js";
 
 /**
@@ -113,8 +113,11 @@ export function createChannel3Catalog(options: Channel3Options = {}): Catalog {
       return (data.products ?? []).map(normaliseProduct).filter((p): p is Product => p !== undefined);
     },
 
-    async get(productId: string) {
-      const response = await call(`/v1/products/${encodeURIComponent(productId)}`, { method: "GET" });
+    async get(productId: string, selectedOptions: SelectedOptions = {}) {
+      const params = new URLSearchParams();
+      for (const [name, value] of Object.entries(selectedOptions)) params.set(`option_${name}`, value);
+      const query = params.size ? `?${params}` : "";
+      const response = await call(`/v1/products/${encodeURIComponent(productId)}${query}`, { method: "GET" });
       if (response.status === 404) return undefined;
       if (!response.ok) throw await failure(response, "product lookup");
       return normaliseProduct((await response.json()) as RawProduct);

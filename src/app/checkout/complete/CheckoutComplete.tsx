@@ -30,7 +30,7 @@ export function OrderSummary({ order }: { order: PublicOrder }) {
   return (
     <div className="mt-8 overflow-hidden rounded-2xl border border-line bg-paper text-left">
       <div className="flex items-center justify-between border-b border-line px-5 py-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted">Order summary</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Order summary</span>
         <StatusPill status={order.status} />
       </div>
       <ul className="divide-y divide-line">
@@ -39,7 +39,7 @@ export function OrderSummary({ order }: { order: PublicOrder }) {
             <Thumb src={item.imageUrl} alt={item.title} className="h-12 w-12" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ink">{item.title}</p>
-              <p className="text-xs text-muted">
+              <p className="text-xs text-muted-foreground">
                 {item.quantity} × {formatMoney(item.unitCents, order.currency)}
                 {item.merchant ? ` · ${item.merchant}` : ""}
               </p>
@@ -95,7 +95,7 @@ export function CheckoutComplete() {
 
   if (state.status === "loading") {
     return (
-      <div className="flex flex-col items-center py-16 text-muted" role="status">
+      <div className="flex flex-col items-center py-16 text-muted-foreground" role="status">
         <Spinner className="h-7 w-7" />
         <p className="mt-4 text-sm">Confirming your payment with PayPal…</p>
       </div>

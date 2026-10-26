@@ -1,13 +1,17 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import type { Database } from "../../db/client.js";
 import {
   OrderError,
   cancelOrder,
+  findOrderByCaptureId,
   findOrderById,
   findOrderByPayPalId,
+  findUserOrder,
   listUserOrders,
+  markRefunded,
   orderListView,
   publicOrderView,
+  refundOrder,
   syncOrder,
 } from "../orders.js";
 import type { Services } from "../services.js";
@@ -19,6 +23,9 @@ import type { AppSession } from "../session.js";
  *   GET /paypal/return?token=…    PayPal sends the buyer here after approving: capture, then
  *                                 303 → /checkout/complete?order=<id>[&error=<code>]
  *   GET /paypal/cancel?order=<id> → mark CANCELLED, 303 → /checkout/cancelled?order=<id>
+ *   POST /api/orders/:id/refund   → { order } full refund of the signed-in user's paid order
+ *   POST /paypal/webhook          PayPal events (signature verified with PayPal): approvals are
+ *                                 captured, captures and refunds update the order on their own
  *
  * The PayPal routes and the public status need no session: the buyer may come
  * back in a tab without our cookie. The PayPal token only lets someone finish
@@ -36,6 +43,68 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
       }
       const rows = await listUserOrders(db, userId, 50);
       response.json({ orders: rows.map(orderListView) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/api/orders/:id/refund", async (request, response, next) => {
+    try {
+      const userId = session.currentUserId(request);
+      if (!userId) {
+        response.status(401).json({ error: "not_signed_in" });
+        return;
+      }
+      const row = await findUserOrder(db, userId, request.params.id);
+      if (!row) {
+        response.status(404).json({ error: "order_not_found" });
+        return;
+      }
+      try {
+        response.json({ order: orderListView(await refundOrder(db, services.payments, row)) });
+      } catch (caught) {
+        if (!(caught instanceof OrderError)) throw caught;
+        response.status(caught.code === "not_refundable" ? 409 : 502).json({ error: caught.code, ...caught.toJSON() });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/paypal/webhook", express.json({ limit: "256kb" }), async (request, response, next) => {
+    try {
+      const headers: Record<string, string | undefined> = {};
+      for (const name of ["paypal-auth-algo", "paypal-cert-url", "paypal-transmission-id", "paypal-transmission-sig", "paypal-transmission-time"]) {
+        const value = request.headers[name];
+        headers[name] = typeof value === "string" ? value : undefined;
+      }
+      const event = (request.body ?? {}) as {
+        event_type?: string;
+        resource?: { id?: string; supplementary_data?: { related_ids?: { order_id?: string } }; links?: { rel?: string; href?: string }[] };
+      };
+      if (!(await services.payments.verifyWebhook({ headers, event }))) {
+        response.status(400).json({ error: "invalid_webhook" });
+        return;
+      }
+      const resource = event.resource ?? {};
+      switch (event.event_type) {
+        case "CHECKOUT.ORDER.APPROVED":
+        case "PAYMENT.CAPTURE.COMPLETED":
+        case "PAYMENT.CAPTURE.DENIED": {
+          const paypalOrderId = event.event_type === "CHECKOUT.ORDER.APPROVED" ? resource.id : resource.supplementary_data?.related_ids?.order_id;
+          const row = paypalOrderId ? await findOrderByPayPalId(db, paypalOrderId) : undefined;
+          if (row) await syncOrder(db, services.payments, row).catch((error: unknown) => console.error("webhook sync", error));
+          break;
+        }
+        case "PAYMENT.CAPTURE.REFUNDED": {
+          const up = resource.links?.find((link) => link.rel === "up")?.href ?? "";
+          const captureId = /\/captures\/([^/?#]+)/.exec(up)?.[1];
+          const row = captureId ? await findOrderByCaptureId(db, decodeURIComponent(captureId)) : undefined;
+          if (row) await markRefunded(db, row.id, resource.id ?? null);
+          break;
+        }
+      }
+      response.json({ ok: true });
     } catch (error) {
       next(error);
     }
