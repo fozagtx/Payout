@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import type { Pool } from "pg";
-import { createDatabase } from "./client.js";
+import { createDatabase, DB_SCHEMA } from "./client.js";
 
 const directory = new URL("../../migrations/", import.meta.url);
 
@@ -9,6 +9,7 @@ const directory = new URL("../../migrations/", import.meta.url);
 export async function runMigrations(pool: Pool, log: (line: string) => void = console.log) {
   const connection = await pool.connect();
   try {
+    await connection.query(`CREATE SCHEMA IF NOT EXISTS ${DB_SCHEMA}`);
     await connection.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         name text PRIMARY KEY,
