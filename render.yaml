@@ -1,6 +1,6 @@
 # One-click deploy on Render: a Node web service.
-# DATABASE_URL is optional: leave it empty to use a local file database (wiped on every redeploy),
-# or paste your existing Render Postgres Internal URL (Payout uses its own `payout` schema).
+# Render's free plan allows one free Postgres per account, so DATABASE_URL is pasted in:
+# your existing Render Postgres Internal URL works as-is (Payout uses its own `payout` schema).
 services:
   - type: web
     name: payout
