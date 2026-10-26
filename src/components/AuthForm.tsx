@@ -67,20 +67,20 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   const inputClass = (invalid: boolean) =>
     [
-      "block w-full rounded-xl border bg-white px-3.5 py-2.5 text-[15px] text-slate-900 shadow-sm outline-none transition",
-      "placeholder:text-slate-400 focus:ring-4 dark:bg-slate-950 dark:text-white",
+      "block w-full rounded-xl border bg-paper px-3.5 py-2.5 text-[15px] text-ink shadow-sm outline-none transition",
+      "placeholder:text-muted focus:ring-4",
       invalid
-        ? "border-red-400 focus:border-red-500 focus:ring-red-500/15 dark:border-red-500/70"
-        : "border-slate-300 focus:border-brand focus:ring-brand/15 dark:border-slate-700",
+        ? "border-red-400 focus:border-red-500 focus:ring-red-500/15"
+        : "border-line-strong focus:border-ink focus:ring-ink/10",
     ].join(" ");
 
   return (
     <div className="w-full max-w-md animate-rise">
       <div className="mb-7 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-navy sm:text-3xl dark:text-white">
+        <h1 className="text-[32px] leading-[1.05] font-semibold tracking-[-0.045em] text-ink sm:text-[40px]">
           {isSignup ? "Create your Payout account" : "Welcome back"}
         </h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+        <p className="mt-3 text-[15px] text-ink-soft">
           {fromConsent
             ? "Sign in to finish connecting Payout to your AI app."
             : isSignup
@@ -89,11 +89,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-navy/5 sm:p-8 dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-[26px] border border-line bg-paper p-6 shadow-[0_24px_60px_-30px_rgba(45,43,40,0.35)] sm:p-8">
         {serverError ? (
           <div
             role="alert"
-            className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+            className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-800"
           >
             <AlertIcon className="mt-px h-4 w-4" />
             <span>{serverError}</span>
@@ -102,7 +102,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
         <form onSubmit={onSubmit} noValidate className="space-y-5">
           <div>
-            <label htmlFor={`${id}-username`} className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor={`${id}-username`} className="mb-1.5 block text-sm font-medium text-ink-soft">
               Username
             </label>
             <input
@@ -122,18 +122,18 @@ export function AuthForm({ mode }: { mode: Mode }) {
               className={inputClass(Boolean(errors.username))}
             />
             {errors.username ? (
-              <p id={`${id}-username-error`} className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+              <p id={`${id}-username-error`} className="mt-1.5 text-sm text-red-600">
                 {errors.username}
               </p>
             ) : isSignup ? (
-              <p id={`${id}-username-hint`} className="mt-1.5 text-xs text-slate-500">
+              <p id={`${id}-username-hint`} className="mt-1.5 text-xs text-muted">
                 3–32 characters: a–z, 0–9 and _
               </p>
             ) : null}
           </div>
 
           <div>
-            <label htmlFor={`${id}-password`} className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            <label htmlFor={`${id}-password`} className="mb-1.5 block text-sm font-medium text-ink-soft">
               Password
             </label>
             <div className="relative">
@@ -154,13 +154,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-slate-500 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-brand dark:hover:text-slate-200"
+                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-ink"
               >
                 {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
               </button>
             </div>
             {errors.password ? (
-              <p id={`${id}-password-error`} className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+              <p id={`${id}-password-error`} className="mt-1.5 text-sm text-red-600">
                 {errors.password}
               </p>
             ) : null}
@@ -171,15 +171,15 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
+        <p className="mt-6 text-center text-sm text-ink-soft">
           {isSignup ? "Already have an account?" : "New to Payout?"}{" "}
-          <Link href={otherHref} className="font-semibold text-brand hover:underline dark:text-sky-400">
+          <Link href={otherHref} className="font-semibold text-ink underline decoration-tan-ink/40 underline-offset-4 hover:decoration-ink">
             {isSignup ? "Log in" : "Create an account"}
           </Link>
         </p>
       </div>
 
-      <p className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+      <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted">
         <ShieldIcon className="h-4 w-4" /> Payments are approved on PayPal. Payout never sees your card.
       </p>
     </div>
@@ -187,5 +187,5 @@ export function AuthForm({ mode }: { mode: Mode }) {
 }
 
 export function AuthFormFallback() {
-  return <div className="h-[460px] w-full max-w-md animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-900" aria-hidden="true" />;
+  return <div className="h-[460px] w-full max-w-md animate-pulse rounded-[26px] bg-paper" aria-hidden="true" />;
 }

@@ -44,20 +44,20 @@ export function page(branding: Branding, title: string, body: string) {
 <title>${escapeHtml(title)} · ${name}</title>
 <link rel="icon" href="/favicon.ico">
 <style>
-  :root { color-scheme: light dark; --bg:#f6f4ef; --card:#fff; --ink:#151515; --muted:#666; --line:#e4e0d8; --accent:${accent}; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#121212; --card:#1c1c1c; --ink:#f2f2f2; --muted:#a0a0a0; --line:#2e2e2e; } }
+  :root { color-scheme: light; --bg:#fbf9f3; --card:#fff; --ink:#2d2b28; --muted:#6f6a61; --line:#ebe5d9; --accent:${accent}; }
   * { box-sizing: border-box; }
   body { margin:0; min-height:100vh; display:grid; place-items:center; padding:16px;
-         background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
+         background:var(--bg); color:var(--ink); font:15px/1.5 "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+         background-image:radial-gradient(circle at 1px 1px, rgba(169,135,91,.28) 1px, transparent 0); background-size:28px 28px; }
   .card { width:100%; max-width:460px; background:var(--card); border:1px solid var(--line);
-          border-radius:20px; padding:28px; }
+          border-radius:26px; padding:32px; box-shadow:0 24px 60px -30px rgba(45,43,40,.35); }
   .brand { display:flex; align-items:center; gap:10px; margin:0 0 20px; font-weight:600; }
   .brand img { width:28px; height:28px; border-radius:7px; }
-  h1 { margin:0 0 8px; font-size:24px; letter-spacing:-0.02em; }
+  h1 { margin:0 0 8px; font-size:28px; line-height:1.1; font-weight:600; letter-spacing:-0.04em; }
   p { margin:0 0 16px; color:var(--muted); }
   ul { margin:0 0 20px; padding-left:20px; }
   li { margin:4px 0; }
-  .note { font-size:13px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; }
+  .note { font-size:13px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--bg); }
   .note strong { color:var(--ink); }
   .connections { list-style:none; padding:0; }
   .connection { display:flex; gap:12px; align-items:center; justify-content:space-between;
@@ -65,9 +65,9 @@ export function page(branding: Branding, title: string, body: string) {
   .connection p { margin:2px 0 0; font-size:13px; }
   .connection form { flex:0 0 auto; display:flex; }
   input { width:100%; padding:10px 12px; margin:0 0 12px; border:1px solid var(--line);
-          border-radius:10px; background:transparent; color:inherit; font:inherit; }
+          border-radius:12px; background:transparent; color:inherit; font:inherit; }
   .row { display:flex; gap:10px; }
-  button { flex:1; padding:11px 14px; border-radius:10px; border:1px solid var(--accent);
+  button { flex:1; padding:12px 14px; border-radius:14px; border:1px solid var(--accent);
            font:inherit; font-weight:600; cursor:pointer; background:var(--accent); color:#fff; }
   button.secondary { background:transparent; color:var(--ink); border-color:var(--line); }
 </style>

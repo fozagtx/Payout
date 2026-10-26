@@ -6,7 +6,7 @@ export function StatusLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <Header actions={null} />
-      <main className="flex flex-1 items-start justify-center px-4 py-12 sm:py-20">
+      <main className="bg-dots flex flex-1 items-start justify-center px-4 py-14 sm:py-24">
         <div className="w-full max-w-lg animate-rise">{children}</div>
       </main>
       <Footer />
@@ -15,13 +15,13 @@ export function StatusLayout({ children }: { children: ReactNode }) {
 }
 
 const ring = {
-  green: "bg-emerald-100 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300",
-  amber: "bg-amber-100 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
-  red: "bg-red-100 text-red-600 dark:bg-red-400/15 dark:text-red-300",
-  slate: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300",
-  blue: "bg-sky text-brand dark:bg-brand/15 dark:text-sky-300",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  amber: "bg-amber-50 text-amber-700 ring-amber-200",
+  red: "bg-red-50 text-red-600 ring-red-200",
+  slate: "bg-paper text-ink-soft ring-line-strong",
+  blue: "bg-sky text-brand ring-blue-200",
 };
 
 export function StatusIcon({ tone, children }: { tone: keyof typeof ring; children: ReactNode }) {
-  return <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${ring[tone]}`}>{children}</div>;
+  return <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-[20px] ring-1 ${ring[tone]}`}>{children}</div>;
 }

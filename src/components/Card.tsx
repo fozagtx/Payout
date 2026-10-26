@@ -2,10 +2,7 @@ import type { ReactNode } from "react";
 
 export function Card({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
   return (
-    <section
-      id={id}
-      className={`rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-slate-800 dark:bg-slate-900 ${className}`}
-    >
+    <section id={id} className={`rounded-[22px] border border-line bg-paper shadow-[0_1px_0_rgba(45,43,40,0.03),0_8px_24px_-12px_rgba(45,43,40,0.08)] ${className}`}>
       {children}
     </section>
   );
@@ -13,26 +10,27 @@ export function Card({ children, className = "", id }: { children: ReactNode; cl
 
 export function CardHeader({
   icon,
+  eyebrow,
   title,
   description,
   action,
 }: {
   icon?: ReactNode;
+  eyebrow?: string;
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6 dark:border-slate-800">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
       <div className="flex min-w-0 items-start gap-3">
         {icon ? (
-          <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-sky text-brand dark:bg-brand/15 dark:text-sky-300">
-            {icon}
-          </div>
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-cream text-ink">{icon}</div>
         ) : null}
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
-          {description ? <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
+          {eyebrow ? <p className="eyebrow mb-1">{eyebrow}</p> : null}
+          <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-ink">{title}</h2>
+          {description ? <p className="mt-0.5 text-sm text-ink-soft">{description}</p> : null}
         </div>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

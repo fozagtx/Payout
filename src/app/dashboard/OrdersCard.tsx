@@ -27,7 +27,7 @@ export function OrdersCard() {
   }, [load]);
 
   return (
-    <Card>
+    <Card id="orders">
       <CardHeader
         icon={<BagIcon />}
         title="Orders"
@@ -42,28 +42,28 @@ export function OrdersCard() {
         {state.status === "loading" ? (
           <div className="space-y-3 px-5 py-5 sm:px-6" aria-hidden="true">
             {[0, 1].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+              <div key={i} className="h-16 animate-pulse rounded-xl bg-cream" />
             ))}
           </div>
         ) : state.status === "error" ? (
           <div className="px-5 py-8 text-center sm:px-6">
-            <p className="text-sm text-slate-600 dark:text-slate-400">We couldn’t load your orders. {state.message}</p>
+            <p className="text-sm text-ink-soft">We couldn’t load your orders. {state.message}</p>
             <Button variant="secondary" size="sm" className="mt-3" onClick={() => void load()}>
               Try again
             </Button>
           </div>
         ) : state.orders.length === 0 ? (
           <div className="px-5 py-10 text-center sm:px-6">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky text-brand dark:bg-brand/15 dark:text-sky-300">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky text-brand">
               <BagIcon />
             </div>
-            <p className="mt-3 text-sm font-semibold text-slate-800 dark:text-slate-200">No orders yet</p>
-            <p className="mx-auto mt-1 max-w-xs text-sm text-slate-500">
+            <p className="mt-3 text-sm font-semibold text-ink">No orders yet</p>
+            <p className="mx-auto mt-1 max-w-xs text-sm text-muted">
               Ask Claude to find something, pick it in the canvas and pay with PayPal. It’ll appear here.
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          <ul className="divide-y divide-line">
             {state.orders.map((order) => {
               const info = orderStatus(order.status);
               const items = order.items ?? [];
@@ -75,16 +75,16 @@ export function OrdersCard() {
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <div className="flex -space-x-3">
                         {items.slice(0, 3).map((item, i) => (
-                          <Thumb key={`${item.productId}-${i}`} src={item.imageUrl} alt={item.title} className="h-11 w-11 ring-2 ring-white dark:ring-slate-900" />
+                          <Thumb key={`${item.productId}-${i}`} src={item.imageUrl} alt={item.title} className="h-11 w-11 ring-2 ring-white" />
                         ))}
                         {items.length === 0 ? <Thumb alt="" className="h-11 w-11" /> : null}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                        <p className="truncate text-sm font-semibold text-ink">
                           {first ? first.title : "Order"}
-                          {items.length > 1 ? <span className="font-normal text-slate-500"> + {items.length - 1} more</span> : null}
+                          {items.length > 1 ? <span className="font-normal text-muted"> + {items.length - 1} more</span> : null}
                         </p>
-                        <p className="line-clamp-2 text-xs text-slate-500">
+                        <p className="line-clamp-2 text-xs text-muted">
                           {count} {count === 1 ? "item" : "items"}
                           {first?.merchant ? ` · ${first.merchant}` : ""}
                           {order.createdAt ? ` · ${formatDate(order.createdAt)}` : ""}
@@ -93,7 +93,7 @@ export function OrdersCard() {
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <div className="text-right">
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">{formatMoney(order.totalCents, order.currency)}</p>
+                        <p className="font-mono text-sm font-medium text-ink">{formatMoney(order.totalCents, order.currency)}</p>
                         <div className="mt-0.5">
                           <StatusPill status={order.status} />
                         </div>

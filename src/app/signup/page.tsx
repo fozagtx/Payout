@@ -9,7 +9,7 @@ export default function Page() {
   return (
     <>
       <Header actions={null} />
-      <main className="flex flex-1 items-start justify-center px-4 py-12 sm:py-20">
+      <main className="bg-dots flex flex-1 items-start justify-center px-4 py-12 sm:py-20">
         <Suspense fallback={<AuthFormFallback />}>
           <AuthForm mode="signup" />
         </Suspense>
