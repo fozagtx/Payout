@@ -5,6 +5,7 @@
   "engines": {
     "node": ">=22"
   },
+  "packageManager": "pnpm@11.21.0",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env --ignore './.next/**' --ignore './src/app/**' --ignore './src/components/**' server.ts",
     "build": "next build",
@@ -40,12 +41,5 @@
     "tailwindcss": "4.3.3",
     "typescript": "~5.9.3",
     "vitest": "^4.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp",
-      "@tailwindcss/oxide"
-    ]
   }
 }
