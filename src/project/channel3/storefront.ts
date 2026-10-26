@@ -18,6 +18,14 @@ import type { SelectedOptions } from "../services.js";
 
 const LOCALE = { country: "US", currency: "USD" } as const;
 export const SEARCH_PAGE_SIZE = 24;
+const PRODUCT_SUBSCRIPTIONS_URL = "https://api.trychannel3.com/v1/product-subscriptions";
+
+export class Channel3ProductProcessingError extends Error {
+  constructor() {
+    super("Channel3 is still processing this product — try again in a minute");
+    this.name = "Channel3ProductProcessingError";
+  }
+}
 
 export interface StorefrontSearch {
   query?: string;
@@ -40,8 +48,8 @@ export interface Storefront {
   categories(query: string): Promise<CategorySummary[]>;
   category(slug: string): Promise<Category | undefined>;
   lookup(url: string, userId?: string): Promise<Product | undefined>;
-  startTracking(productId: string): Promise<void>;
-  stopTracking(productId: string): Promise<void>;
+  subscribe(productId: string): Promise<string>;
+  unsubscribe(subscriptionId: string): Promise<void>;
   earnings(userId?: string, days?: number): Promise<{
     clicks: number;
     sales: number;
@@ -97,11 +105,31 @@ export function createStorefront(apiKey: string, client = new Channel3({ apiKey,
     categories: async (query) => (await client.categories.search({ query, limit: 10 })).categories,
     category: (slug) => orUndefined(client.categories.retrieve({ slug })),
     lookup: async (url, userId) => (await orUndefined(client.products.lookup({ url, ...userHeader(userId) })))?.product,
-    async startTracking(productId) {
-      await client.priceTracking.start({ canonical_product_id: productId });
+    async subscribe(productId) {
+      const response = await fetch(PRODUCT_SUBSCRIPTIONS_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": apiKey },
+        body: JSON.stringify({
+          product_id: productId,
+          events: ["offer.price.changed", "offer.availability.changed"],
+        }),
+      });
+      if (response.status === 409) throw new Channel3ProductProcessingError();
+      if (!response.ok) throw new Error(`Channel3 product subscription failed with status ${response.status}`);
+      const payload = (await response.json()) as { subscription_id?: unknown };
+      if (typeof payload.subscription_id !== "string" || !payload.subscription_id) {
+        throw new Error("Channel3 product subscription response didn't include a subscription_id");
+      }
+      return payload.subscription_id;
     },
-    async stopTracking(productId) {
-      await client.priceTracking.stop({ canonical_product_id: productId });
+    async unsubscribe(subscriptionId) {
+      const response = await fetch(`${PRODUCT_SUBSCRIPTIONS_URL}/${encodeURIComponent(subscriptionId)}`, {
+        method: "DELETE",
+        headers: { "x-api-key": apiKey },
+      });
+      if (response.status !== 404 && !response.ok) {
+        throw new Error(`Channel3 product unsubscription failed with status ${response.status}`);
+      }
     },
     async earnings(userId, days = 30) {
       const windowDays = Math.min(90, Math.max(1, Math.floor(days)));

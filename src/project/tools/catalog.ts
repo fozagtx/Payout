@@ -8,6 +8,7 @@ import { isInStock } from "../../lib/format.js";
 import { logTool, result } from "../../mcp-kit/index.js";
 import { signImageUrl } from "../api/images.js";
 import { normaliseProduct } from "../channel3/client.js";
+import { Channel3ProductProcessingError } from "../channel3/storefront.js";
 import { priceWatches } from "../schema.js";
 import type { Product, Services } from "../services.js";
 import { SHOP_WIDGET_URI } from "../ui/resource.js";
@@ -298,8 +299,10 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
           .where(and(eq(priceWatches.userId, context.userId), eq(priceWatches.productId, args.product_id)))
           .limit(1);
         if (existing) {
+          const subscriptionId = await services.storefront.subscribe(args.product_id);
+          const [watch] = await db.update(priceWatches).set({ subscriptionId }).where(eq(priceWatches.id, existing.id)).returning();
           await logTool(db, context.connectionId, "watch_price", args, "allowed");
-          return result({ watch: existing });
+          return result({ watch: watch ?? { ...existing, subscriptionId } });
         }
         const product = await services.storefront.product(args.product_id, undefined, context.userId);
         if (!product) {
@@ -309,7 +312,6 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
         const bestOffer = [...(product.offers ?? [])]
           .filter((offer) => isInStock(offer.availability))
           .sort((left, right) => left.price.price - right.price.price)[0];
-        const tracked = await db.select({ id: priceWatches.id }).from(priceWatches).where(eq(priceWatches.productId, product.id)).limit(1);
         const [watch] = await db
           .insert(priceWatches)
           .values({
@@ -331,21 +333,30 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
             .from(priceWatches)
             .where(and(eq(priceWatches.userId, context.userId), eq(priceWatches.productId, product.id)))
             .limit(1);
+          if (!concurrent) throw new Error("Price watch was not created");
+          const subscriptionId = await services.storefront.subscribe(product.id);
+          const [updated] = await db.update(priceWatches).set({ subscriptionId }).where(eq(priceWatches.id, concurrent.id)).returning();
           await logTool(db, context.connectionId, "watch_price", args, "allowed");
-          return result({ watch: concurrent });
+          return result({ watch: updated ?? { ...concurrent, subscriptionId } });
         }
-        if (!tracked.length) {
-          try {
-            await services.storefront.startTracking(product.id);
-          } catch (caught) {
-            await db.delete(priceWatches).where(eq(priceWatches.id, watch.id));
-            throw caught;
-          }
+        try {
+          const subscriptionId = await services.storefront.subscribe(product.id);
+          const [subscribed] = await db
+            .update(priceWatches)
+            .set({ subscriptionId })
+            .where(eq(priceWatches.id, watch.id))
+            .returning();
+          await logTool(db, context.connectionId, "watch_price", args, "allowed");
+          return result({ watch: subscribed ?? { ...watch, subscriptionId } });
+        } catch (caught) {
+          await db.delete(priceWatches).where(eq(priceWatches.id, watch.id));
+          throw caught;
         }
-        await logTool(db, context.connectionId, "watch_price", args, "allowed");
-        return result({ watch });
       } catch (caught) {
         await logTool(db, context.connectionId, "watch_price", args, "error", errorMessage(caught));
+        if (caught instanceof Channel3ProductProcessingError) {
+          return result({ code: "product_processing", message: caught.message }, true);
+        }
         return result({ code: "catalog_unavailable", message: "Couldn't start that price watch right now." }, true);
       }
     }

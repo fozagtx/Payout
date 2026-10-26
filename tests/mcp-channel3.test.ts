@@ -23,7 +23,7 @@ const searches: StorefrontSearch[] = [];
 const retrieves: { id: string; options?: SelectedOptions }[] = [];
 const lookups: string[] = [];
 const earningsCalls: { userId?: string; days?: number }[] = [];
-const tracking = { started: [] as string[], stopped: [] as string[] };
+const subscriptions = { requested: [] as string[], canceled: [] as string[] };
 const storefront: Storefront = {
   async search(input) {
     searches.push(input);
@@ -46,11 +46,12 @@ const storefront: Storefront = {
     lookups.push(url);
     return url.includes("missing") ? undefined : sdkProduct("linked-product", 25);
   },
-  async startTracking(productId) {
-    tracking.started.push(productId);
+  async subscribe(productId) {
+    subscriptions.requested.push(productId);
+    return `subscription-${productId}`;
   },
-  async stopTracking(productId) {
-    tracking.stopped.push(productId);
+  async unsubscribe(subscriptionId) {
+    subscriptions.canceled.push(subscriptionId);
   },
   async earnings(userId, days) {
     earningsCalls.push({ ...(userId ? { userId } : {}), ...(days === undefined ? {} : { days }) });

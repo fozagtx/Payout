@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../../db/client.js";
 import { isInStock } from "../../lib/format.js";
+import { Channel3ProductProcessingError } from "../channel3/storefront.js";
 import { priceWatches, webhookEvents } from "../schema.js";
 import type { Services } from "../services.js";
 import type { AppSession } from "../session.js";
@@ -21,48 +22,67 @@ function money(cents: number, currency: string) {
   }
 }
 
-function webhookPayload(body: unknown) {
-  const envelope = body as {
-    type?: string;
-    event_type?: string;
-    data?: { object?: Record<string, unknown> } | Record<string, unknown>;
-    object?: Record<string, unknown>;
-  };
-  const data = envelope.data as Record<string, unknown> | undefined;
-  const payload = (data?.object ?? data ?? envelope.object ?? envelope) as Record<string, unknown>;
-  const offer = (payload.offer ?? payload) as Record<string, unknown>;
-  const nestedProduct = (payload.product ?? offer.product) as Record<string, unknown> | undefined;
-  const priceValue = offer.price ?? payload.price ?? payload.new_price ?? payload.current_price;
-  const price = typeof priceValue === "number"
-    ? priceValue
-    : typeof priceValue === "object" && priceValue !== null
-      ? Number((priceValue as { price?: unknown; amount?: unknown; value?: unknown }).price ??
-          (priceValue as { amount?: unknown }).amount ?? (priceValue as { value?: unknown }).value)
-      : Number(priceValue);
-  const availability = offer.availability ?? offer.in_stock ?? payload.availability ?? payload.in_stock ?? payload.available;
-  const inStock = typeof availability === "boolean"
-    ? availability
-    : typeof availability === "string"
-      ? ["in_stock", "instock", "in stock", "available"].includes(availability.toLowerCase())
-      : undefined;
-  const rawCurrency = offer.currency ?? payload.currency;
-  const priceObject = typeof priceValue === "object" && priceValue !== null ? priceValue as { currency?: string; currency_code?: string } : undefined;
-  return {
-    type: envelope.type ?? envelope.event_type ?? "",
-    productId: String(
-      payload.canonical_product_id ??
-        payload.product_id ??
-        offer.canonical_product_id ??
-        offer.product_id ??
-        nestedProduct?.canonical_product_id ??
-        nestedProduct?.id ??
-        ""
-    ),
-    priceCents: Number.isFinite(price) && price >= 0 ? Math.round(price * 100) : undefined,
-    currency: String(rawCurrency ?? priceObject?.currency ?? priceObject?.currency_code ?? "USD"),
-    domain: String(offer.domain ?? payload.domain ?? offer.website ?? payload.website ?? "the store"),
-    inStock,
-  };
+type WatchUpdate = {
+  type: "offer.price.changed" | "offer.availability.changed" | "price.changed";
+  productId: string;
+  domain: string;
+  priceCents?: number;
+  currency?: string;
+  inStock?: boolean;
+};
+
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+
+function webhookPayload(body: unknown): WatchUpdate | undefined {
+  const envelope = record(body);
+  if (!envelope || typeof envelope.type !== "string") return undefined;
+
+  if (envelope.type === "offer.price.changed") {
+    const data = record(envelope.data);
+    const subject = record(data?.subject);
+    const current = record(data?.current);
+    const productId = subject?.product_id;
+    const domain = subject?.domain;
+    const price = current?.price;
+    const currency = current?.currency;
+    if (
+      typeof productId !== "string" || !productId ||
+      typeof domain !== "string" || !domain ||
+      typeof price !== "number" || !Number.isFinite(price) || price < 0 ||
+      typeof currency !== "string" || !currency
+    ) return undefined;
+    return { type: envelope.type, productId, domain, priceCents: Math.round(price * 100), currency };
+  }
+
+  if (envelope.type === "offer.availability.changed") {
+    const data = record(envelope.data);
+    const subject = record(data?.subject);
+    const productId = subject?.product_id;
+    const domain = subject?.domain;
+    if (
+      typeof productId !== "string" || !productId ||
+      typeof domain !== "string" || !domain ||
+      (data?.current !== "InStock" && data?.current !== "OutOfStock")
+    ) return undefined;
+    return { type: envelope.type, productId, domain, inStock: data.current === "InStock" };
+  }
+
+  if (envelope.type === "price.changed") {
+    const productId = envelope.canonical_product_id;
+    const domain = envelope.domain;
+    const price = envelope.new_price;
+    const currency = envelope.currency;
+    if (
+      typeof productId !== "string" || !productId ||
+      typeof domain !== "string" || !domain ||
+      typeof price !== "number" || !Number.isFinite(price) || price < 0 ||
+      typeof currency !== "string" || !currency
+    ) return undefined;
+    return { type: envelope.type, productId, domain, priceCents: Math.round(price * 100), currency };
+  }
+
+  return undefined;
 }
 
 export function createWatchesRouter(db: Database, session: AppSession, services: Services, webhookSecret?: string) {
@@ -102,13 +122,14 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
           .onConflictDoNothing()
           .returning({ id: webhookEvents.id });
         if (!created.length) return false;
-        const isPrice = update.type === "offer.price.changed";
+        if (!update) return true;
+        const isPrice = update.type === "offer.price.changed" || update.type === "price.changed";
         const isAvailability = update.type === "offer.availability.changed";
-        if (!update.productId || (!isPrice && !isAvailability)) return true;
         const watches = await transaction.select().from(priceWatches).where(eq(priceWatches.productId, update.productId));
         for (const watch of watches) {
           const cents = isPrice ? update.priceCents : undefined;
           const stock = isAvailability ? update.inStock : undefined;
+          const currency = update.currency ?? watch.currency;
           const priceDropped = cents !== undefined && (watch.lastCents === null || cents < watch.lastCents);
           const priceAlert = priceDropped && (
             watch.targetCents !== null
@@ -117,14 +138,14 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
           );
           const stockAlert = stock === true && watch.lastInStock === false;
           const alert = priceAlert
-            ? `Price dropped from ${money(watch.lastCents ?? watch.startCents ?? cents, update.currency)} to ${money(cents, update.currency)} at ${update.domain}`
+            ? `Price dropped from ${money(watch.lastCents ?? watch.startCents ?? cents, currency)} to ${money(cents, currency)} at ${update.domain}`
             : stockAlert
               ? `${watch.title} is back in stock at ${update.domain}`
               : undefined;
           await transaction
             .update(priceWatches)
             .set({
-              ...(cents !== undefined ? { lastCents: cents, currency: update.currency } : {}),
+              ...(cents !== undefined ? { lastCents: cents, currency } : {}),
               ...(stock !== undefined ? { lastInStock: stock } : {}),
               ...(alert ? { alert, alertedAt: new Date() } : {}),
             })
@@ -180,7 +201,9 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
         .where(and(eq(priceWatches.userId, userId), eq(priceWatches.productId, productId)))
         .limit(1);
       if (existing) {
-        response.json({ watch: existing });
+        const subscriptionId = await storefront.subscribe(productId);
+        const [watch] = await db.update(priceWatches).set({ subscriptionId }).where(eq(priceWatches.id, existing.id)).returning();
+        response.json({ watch: watch ?? { ...existing, subscriptionId } });
         return;
       }
       const product = await storefront.product(productId, undefined, userId);
@@ -193,7 +216,6 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
         .sort((left, right) => left.price.price - right.price.price)[0];
       const startCents = bestOffer ? Math.round(bestOffer.price.price * 100) : null;
       const currency = bestOffer?.price.currency.toUpperCase() ?? "USD";
-      const alreadyTracked = await db.select({ id: priceWatches.id }).from(priceWatches).where(eq(priceWatches.productId, productId)).limit(1);
       const [watch] = await db
         .insert(priceWatches)
         .values({
@@ -215,19 +237,29 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
           .from(priceWatches)
           .where(and(eq(priceWatches.userId, userId), eq(priceWatches.productId, productId)))
           .limit(1);
-        response.json({ watch: concurrent });
+        if (!concurrent) throw new Error("Price watch was not created");
+        const subscriptionId = await storefront.subscribe(productId);
+        const [updated] = await db.update(priceWatches).set({ subscriptionId }).where(eq(priceWatches.id, concurrent.id)).returning();
+        response.json({ watch: updated ?? { ...concurrent, subscriptionId } });
         return;
       }
-      if (!alreadyTracked.length) {
-        try {
-          await storefront.startTracking(productId);
-        } catch (error) {
-          await db.delete(priceWatches).where(eq(priceWatches.id, watch.id));
-          throw error;
-        }
+      try {
+        const subscriptionId = await storefront.subscribe(productId);
+        const [subscribed] = await db
+          .update(priceWatches)
+          .set({ subscriptionId })
+          .where(eq(priceWatches.id, watch.id))
+          .returning();
+        response.status(201).json({ watch: subscribed ?? { ...watch, subscriptionId } });
+      } catch (error) {
+        await db.delete(priceWatches).where(eq(priceWatches.id, watch.id));
+        throw error;
       }
-      response.status(201).json({ watch });
     } catch (error) {
+      if (error instanceof Channel3ProductProcessingError) {
+        response.status(409).json({ error: "product_processing", message: error.message });
+        return;
+      }
       next(error);
     }
   });
@@ -254,7 +286,7 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
       }
       await db.delete(priceWatches).where(eq(priceWatches.id, watch.id));
       const others = await db.select({ id: priceWatches.id }).from(priceWatches).where(eq(priceWatches.productId, watch.productId)).limit(1);
-      if (!others.length) await services.storefront.stopTracking(watch.productId);
+      if (!others.length && watch.subscriptionId) await services.storefront.unsubscribe(watch.subscriptionId);
       response.json({ ok: true });
     } catch (error) {
       next(error);

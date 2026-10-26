@@ -6,6 +6,7 @@ CREATE TABLE price_watches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   product_id text NOT NULL,
+  subscription_id text,
   title text NOT NULL,
   image_url text,
   currency text NOT NULL DEFAULT 'USD',

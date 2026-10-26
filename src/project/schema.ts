@@ -51,6 +51,7 @@ export const priceWatches = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     productId: text("product_id").notNull(),
+    subscriptionId: text("subscription_id"),
     title: text("title").notNull(),
     imageUrl: text("image_url"),
     currency: text("currency").notNull().default("USD"),

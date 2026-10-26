@@ -5,6 +5,7 @@ import { Webhook } from "svix";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Product } from "@channel3/sdk/resources";
 import { createWatchesRouter } from "../src/project/api/watches.js";
+import { Channel3ProductProcessingError } from "../src/project/channel3/storefront.js";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
 import { priceWatches } from "../src/project/schema.js";
 import { createCookieSession } from "../src/project/session.js";
@@ -25,8 +26,9 @@ function sdkProduct(id: string, price = 120): Product {
 
 const storefrontInputs = {
   product: [] as { id: string; userId?: string }[],
-  started: [] as string[],
-  stopped: [] as string[],
+  subscribed: [] as string[],
+  unsubscribed: [] as string[],
+  subscribeError: undefined as Error | undefined,
   earnings: [] as { userId?: string; days?: number }[],
 };
 
@@ -59,11 +61,13 @@ const storefront: Storefront = {
   async lookup() {
     return undefined;
   },
-  async startTracking(productId) {
-    storefrontInputs.started.push(productId);
+  async subscribe(productId) {
+    storefrontInputs.subscribed.push(productId);
+    if (storefrontInputs.subscribeError) throw storefrontInputs.subscribeError;
+    return `subscription-${productId}`;
   },
-  async stopTracking(productId) {
-    storefrontInputs.stopped.push(productId);
+  async unsubscribe(subscriptionId) {
+    storefrontInputs.unsubscribed.push(subscriptionId);
   },
   async earnings(userId, days) {
     storefrontInputs.earnings.push({ ...(userId ? { userId } : {}), ...(days === undefined ? {} : { days }) });
@@ -91,8 +95,9 @@ let bob: { cookie: string; userId: string };
 
 beforeAll(async () => {
   storefrontInputs.product.length = 0;
-  storefrontInputs.started.length = 0;
-  storefrontInputs.stopped.length = 0;
+  storefrontInputs.subscribed.length = 0;
+  storefrontInputs.unsubscribed.length = 0;
+  storefrontInputs.subscribeError = undefined;
   storefrontInputs.earnings.length = 0;
   server = await startServer(
     { catalog: fakeCatalog(), payments: paypal.payments, storefront },
@@ -129,29 +134,47 @@ async function sendWebhook(id: string, event: unknown, signature?: string) {
 }
 
 describe("/api/watches", () => {
-  it("requires a session, creates idempotently, scopes reads and stops tracking only after the last watch", async () => {
+  it("requires a session, stores idempotent subscriptions and unsubscribes only after the last watch", async () => {
     expect((await post("/api/watches", { productId: "p-common" })).status).toBe(401);
     const first = await post("/api/watches", { productId: "p-common", targetPrice: 100 }, alice.cookie);
     expect(first.status).toBe(201);
     const aliceWatch = (await first.json()).watch;
+    expect(aliceWatch.subscriptionId).toBe("subscription-p-common");
+    expect(storefrontInputs.subscribed).toEqual(["p-common"]);
     const repeated = await post("/api/watches", { productId: "p-common", targetPrice: 50 }, alice.cookie);
     expect(repeated.status).toBe(200);
-    expect((await repeated.json()).watch.id).toBe(aliceWatch.id);
-    expect(storefrontInputs.started).toEqual(["p-common"]);
+    expect((await repeated.json()).watch).toMatchObject({ id: aliceWatch.id, subscriptionId: "subscription-p-common" });
+    expect(storefrontInputs.subscribed).toEqual(["p-common", "p-common"]);
 
     const bobsWatchResponse = await post("/api/watches", { productId: "p-common" }, bob.cookie);
     expect(bobsWatchResponse.status).toBe(201);
     const bobsWatch = (await bobsWatchResponse.json()).watch;
-    expect(storefrontInputs.started).toEqual(["p-common"]);
+    expect(bobsWatch.subscriptionId).toBe("subscription-p-common");
+    expect(storefrontInputs.subscribed).toEqual(["p-common", "p-common", "p-common"]);
     expect((await (await fetch(`${server.baseUrl}/api/watches`, { headers: { cookie: bob.cookie } })).json()).watches).toHaveLength(1);
     expect((await (await fetch(`${server.baseUrl}/api/watches`, { headers: { cookie: alice.cookie } })).json()).watches).toHaveLength(1);
 
     expect((await fetch(`${server.baseUrl}/api/watches/${bobsWatch.id}`, { method: "DELETE", headers: { cookie: alice.cookie } })).status).toBe(404);
-    expect(storefrontInputs.stopped).toEqual([]);
+    expect(storefrontInputs.unsubscribed).toEqual([]);
     expect((await fetch(`${server.baseUrl}/api/watches/${aliceWatch.id}`, { method: "DELETE", headers: { cookie: alice.cookie } })).status).toBe(200);
-    expect(storefrontInputs.stopped).toEqual([]);
+    expect(storefrontInputs.unsubscribed).toEqual([]);
     expect((await fetch(`${server.baseUrl}/api/watches/${bobsWatch.id}`, { method: "DELETE", headers: { cookie: bob.cookie } })).status).toBe(200);
-    expect(storefrontInputs.stopped).toEqual(["p-common"]);
+    expect(storefrontInputs.unsubscribed).toEqual(["subscription-p-common"]);
+  });
+
+  it("returns 409 and removes the watch while Channel3 is processing the product", async () => {
+    storefrontInputs.subscribeError = new Channel3ProductProcessingError();
+    try {
+      const response = await post("/api/watches", { productId: "p-processing" }, alice.cookie);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: "product_processing",
+        message: "Channel3 is still processing this product — try again in a minute",
+      });
+      expect(await server.db.select().from(priceWatches).where(eq(priceWatches.productId, "p-processing"))).toEqual([]);
+    } finally {
+      storefrontInputs.subscribeError = undefined;
+    }
   });
 });
 
@@ -180,7 +203,13 @@ describe("POST /channel3/webhook", () => {
     const created = await post("/api/watches", { productId: "p-alert", targetPrice: 100 }, alice.cookie);
     expect(created.status).toBe(201);
     const watch = (await created.json()).watch;
-    const priceEvent = { type: "offer.price.changed", data: { product_id: "p-alert", price: 95, currency: "USD", domain: "shop.example" } };
+    const priceEvent = {
+      type: "offer.price.changed",
+      data: {
+        subject: { product_id: "p-alert", domain: "shop.example" },
+        current: { price: 95, currency: "USD" },
+      },
+    };
     expect((await sendWebhook("msg-bad", priceEvent, "v1,invalid")).status).toBe(400);
 
     const priceResponse = await sendWebhook("msg-price", priceEvent);
@@ -193,7 +222,10 @@ describe("POST /channel3/webhook", () => {
 
     const priceRise = await sendWebhook("msg-price-rise", {
       type: "offer.price.changed",
-      data: { product_id: "p-alert", price: 99, currency: "USD", domain: "shop.example" },
+      data: {
+        subject: { product_id: "p-alert", domain: "shop.example" },
+        current: { price: 99, currency: "USD" },
+      },
     });
     expect(priceRise.status).toBe(200);
     [row] = await server.db.select().from(priceWatches).where(eq(priceWatches.id, watch.id));
@@ -201,18 +233,39 @@ describe("POST /channel3/webhook", () => {
 
     const duplicate = await sendWebhook("msg-price", {
       type: "offer.price.changed",
-      data: { product_id: "p-alert", price: 10, currency: "USD", domain: "shop.example" },
+      data: {
+        subject: { product_id: "p-alert", domain: "shop.example" },
+        current: { price: 10, currency: "USD" },
+      },
     });
     expect((await duplicate.json()).duplicate).toBe(true);
     [row] = await server.db.select().from(priceWatches).where(eq(priceWatches.id, watch.id));
     expect(row!.lastCents).toBe(9900);
 
-    await sendWebhook("msg-stock-out", { type: "offer.availability.changed", data: { product_id: "p-alert", availability: "OutOfStock" } });
-    const backInStock = await sendWebhook("msg-stock-in", { type: "offer.availability.changed", data: { product_id: "p-alert", availability: "InStock" } });
+    await sendWebhook("msg-stock-out", {
+      type: "offer.availability.changed",
+      data: { subject: { product_id: "p-alert", domain: "shop.example" }, current: "OutOfStock" },
+    });
+    const backInStock = await sendWebhook("msg-stock-in", {
+      type: "offer.availability.changed",
+      data: { subject: { product_id: "p-alert", domain: "shop.example" }, current: "InStock" },
+    });
     expect(backInStock.status).toBe(200);
     [row] = await server.db.select().from(priceWatches).where(eq(priceWatches.id, watch.id));
     expect(row).toMatchObject({ lastInStock: true });
     expect(row!.alert).toContain("back in stock");
+
+    const legacyPrice = await sendWebhook("msg-legacy-price", {
+      type: "price.changed",
+      canonical_product_id: "p-alert",
+      domain: "legacy.example",
+      new_price: 80,
+      currency: "USD",
+    });
+    expect(legacyPrice.status).toBe(200);
+    [row] = await server.db.select().from(priceWatches).where(eq(priceWatches.id, watch.id));
+    expect(row).toMatchObject({ lastCents: 8000, currency: "USD" });
+    expect(row!.alert).toContain("legacy.example");
   });
 });
 
@@ -250,7 +303,13 @@ describe("Channel3 earnings and MCP watch tools", () => {
   it("creates a price watch and lists it through MCP", async () => {
     const created = await callTool(server.baseUrl, alice.token, "watch_price", { product_id: "p-mcp", target_price: 90 });
     expect(created.isError).toBe(false);
-    expect(created.data.watch).toMatchObject({ productId: "p-mcp", targetCents: 9000, startCents: 12000 });
+    expect(created.data.watch).toMatchObject({
+      productId: "p-mcp",
+      targetCents: 9000,
+      startCents: 12000,
+      subscriptionId: "subscription-p-mcp",
+    });
+    expect(storefrontInputs.subscribed).toContain("p-mcp");
     const listed = await callTool(server.baseUrl, alice.token, "list_price_watches", {});
     expect(listed.isError).toBe(false);
     expect(listed.data.watches).toEqual(expect.arrayContaining([expect.objectContaining({ productId: "p-mcp" })]));
