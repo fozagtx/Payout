@@ -1,17 +1,21 @@
 import express, { Router } from "express";
 import { eq } from "drizzle-orm";
+import { z } from "zod/v4";
 import type { Database } from "../../db/client.js";
+import { centsFromPayPal } from "../paypal/client.js";
 import {
   OrderError,
+  REFUND_REASONS,
   cancelOrder,
   findOrderByCaptureId,
   findOrderById,
   findOrderByPayPalId,
   findUserOrder,
   listUserOrders,
-  markRefunded,
   orderListView,
   publicOrderView,
+  recordRefund,
+  remainingRefundCents,
   refundOrder,
   syncOrder,
 } from "../orders.js";
@@ -19,13 +23,19 @@ import type { Services } from "../services.js";
 import { orders } from "../schema.js";
 import type { AppSession } from "../session.js";
 
+const refundRequestSchema = z.object({
+  amountCents: z.number().int().positive().optional(),
+  reason: z.enum(REFUND_REASONS),
+  note: z.string().trim().max(255).optional(),
+});
+
 /**
  *   GET /api/orders               → { orders } for the signed-in user (401 otherwise)
  *   GET /api/orders/:id/public    → { order: { id, status, totalCents, currency, items } }
  *   GET /paypal/return?token=…    PayPal sends the buyer here after approving: capture, then
  *                                 303 → /checkout/complete?order=<id>[&error=<code>]
  *   GET /paypal/cancel?order=<id> → mark CANCELLED, 303 → /checkout/cancelled?order=<id>
- *   POST /api/orders/:id/refund   → { order } full refund of the signed-in user's paid order
+ *   POST /api/orders/:id/refund   → { order } full or partial refund of the signed-in user's paid order
  *   POST /paypal/webhook          PayPal events (signature verified with PayPal): approvals are
  *                                 captured, captures and refunds update the order on their own
  *
@@ -99,11 +109,29 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
         response.status(404).json({ error: "order_not_found" });
         return;
       }
+      const parsed = refundRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({
+          error: "invalid_request",
+          message: parsed.error.issues[0]?.message ?? "Invalid refund request.",
+        });
+        return;
+      }
       try {
-        response.json({ order: orderListView(await refundOrder(db, services.payments, row)) });
+        response.json({
+          order: orderListView(
+            await refundOrder(db, services.payments, row, {
+              amountCents: parsed.data.amountCents,
+              reason: parsed.data.reason,
+              note: parsed.data.note || undefined,
+            })
+          ),
+        });
       } catch (caught) {
         if (!(caught instanceof OrderError)) throw caught;
-        response.status(caught.code === "not_refundable" ? 409 : 502).json({ error: caught.code, ...caught.toJSON() });
+        response
+          .status(caught.code === "not_refundable" || caught.code === "invalid_amount" ? 409 : 502)
+          .json({ error: caught.code, ...caught.toJSON() });
       }
     } catch (error) {
       next(error);
@@ -121,6 +149,8 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
         event_type?: string;
         resource?: {
           id?: string;
+          amount?: { value?: string };
+          note_to_payer?: string;
           dispute_id?: string;
           reason?: string;
           status?: string;
@@ -147,7 +177,14 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
           const up = resource.links?.find((link) => link.rel === "up")?.href ?? "";
           const captureId = /\/captures\/([^/?#]+)/.exec(up)?.[1];
           const row = captureId ? await findOrderByCaptureId(db, decodeURIComponent(captureId)) : undefined;
-          if (row) await markRefunded(db, row.id, resource.id ?? null);
+          if (row && resource.id) {
+            await recordRefund(db, row.id, {
+              id: resource.id,
+              cents: resource.amount?.value === undefined ? remainingRefundCents(row) : centsFromPayPal(resource.amount.value),
+              reason: null,
+              note: resource.note_to_payer ?? null,
+            });
+          }
           break;
         }
         case "CUSTOMER.DISPUTE.CREATED":

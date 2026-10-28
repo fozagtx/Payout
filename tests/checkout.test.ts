@@ -56,7 +56,7 @@ describe("create_checkout", () => {
       { productId: "shoe", title: "Trail Runner Shoe", quantity: 2, unitCents: 4999, imageUrl: "https://img.test/shoe.jpg", merchant: "Acme Store" },
       { productId: "sock", title: "Wool Sock", quantity: 2, unitCents: 1250 },
     ]);
-    expect(Object.keys(order).sort()).toEqual(["approveUrl", "currency", "id", "items", "paypalOrderId", "status", "totalCents"]);
+    expect(Object.keys(order).sort()).toEqual(["approveUrl", "currency", "id", "items", "paypalOrderId", "refundedCents", "status", "totalCents"]);
 
     const input = paypal.created.at(-1)!;
     expect(input.referenceId).toBe(order.id);

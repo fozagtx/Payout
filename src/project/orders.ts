@@ -2,7 +2,11 @@ import { and, desc, eq, notInArray } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import { PayPalApiError } from "./paypal/client.js";
 import { orders, users } from "./schema.js";
+import type { RefundEntry, RefundReason } from "./refund-types.js";
 import type { Catalog, OrderLine, PaymentOrder, Payments, SelectedOptions, Services } from "./services.js";
+
+export { REFUND_REASONS } from "./refund-types.js";
+export type { RefundEntry, RefundReason } from "./refund-types.js";
 
 /**
  * Order logic shared by the MCP tools and the HTTP routes: building an order
@@ -10,7 +14,7 @@ import type { Catalog, OrderLine, PaymentOrder, Payments, SelectedOptions, Servi
  * capturing it once the buyer approved.
  */
 
-export type OrderStatus = "CREATING" | "PAYER_ACTION_REQUIRED" | "CREATED" | "APPROVED" | "COMPLETED" | "REFUNDED" | "CANCELLED" | "FAILED";
+export type OrderStatus = "CREATING" | "PAYER_ACTION_REQUIRED" | "CREATED" | "APPROVED" | "COMPLETED" | "PARTIALLY_REFUNDED" | "REFUNDED" | "CANCELLED" | "FAILED";
 
 export const FINAL_STATUSES: readonly OrderStatus[] = ["COMPLETED", "REFUNDED", "CANCELLED", "FAILED"];
 
@@ -27,6 +31,7 @@ export interface OrderView {
   status: string;
   approveUrl: string | null;
   totalCents: number;
+  refundedCents: number;
   currency: string;
   items: OrderLine[];
 }
@@ -38,6 +43,9 @@ export function orderView(row: OrderRow): OrderView {
     status: row.status,
     approveUrl: row.approveUrl,
     totalCents: row.totalCents,
+    refundedCents: row.status === "REFUNDED" && (row.refunds ?? []).length === 0
+      ? row.totalCents
+      : (row.refunds ?? []).reduce((sum, refund) => sum + refund.cents, 0),
     currency: row.currency,
     items: row.items as OrderLine[],
   };
@@ -50,6 +58,7 @@ export const orderListView = (row: OrderRow) => ({
   dispute: row.disputeId
     ? { id: row.disputeId, status: row.disputeStatus, reason: row.disputeReason }
     : null,
+  refunds: row.refunds ?? [],
   createdAt: row.createdAt.toISOString(),
 });
 
@@ -237,7 +246,10 @@ export async function syncOrder(db: Database, payments: Payments, row: OrderRow,
   try {
     let payment = await payments.getOrder(row.paypalOrderId);
     if (payment.status === "APPROVED" || payment.status === "SAVED") payment = await payments.captureOrder(row.paypalOrderId);
-    const status = statusFromPayPal(payment);
+    const status =
+      row.status === "PARTIALLY_REFUNDED" && payment.status === "COMPLETED"
+        ? row.status
+        : statusFromPayPal(payment);
     if (reopen && status !== "COMPLETED") return row;
     const newShipping = Boolean(payment.shipping) && !row.shipping;
     const changed = status !== row.status || (payment.captureId ?? null) !== row.captureId || newShipping;
@@ -268,7 +280,7 @@ export async function cancelOrder(db: Database, orderId: string) {
   const [row] = await db
     .update(orders)
     .set({ status: "CANCELLED", updatedAt: new Date() })
-    .where(and(eq(orders.id, orderId), notInArray(orders.status, [...FINAL_STATUSES])))
+    .where(and(eq(orders.id, orderId), notInArray(orders.status, [...FINAL_STATUSES, "PARTIALLY_REFUNDED"])))
     .returning();
   return row ?? (await findOrderById(db, orderId));
 }
@@ -278,27 +290,69 @@ export async function findOrderByCaptureId(db: Database, captureId: string) {
   return row;
 }
 
-/** Marks a paid order REFUNDED (from our refund call or PayPal's refund webhook). */
-export async function markRefunded(db: Database, orderId: string, refundId: string | null) {
-  const [row] = await db
-    .update(orders)
-    .set({ status: "REFUNDED", ...(refundId ? { refundId } : {}), updatedAt: new Date() })
-    .where(and(eq(orders.id, orderId), eq(orders.status, "COMPLETED")))
-    .returning();
-  return row ?? (await findOrderById(db, orderId))!;
+export function remainingRefundCents(row: Pick<OrderRow, "totalCents" | "refunds">) {
+  const refunded = (row.refunds ?? []).reduce((sum, refund) => sum + refund.cents, 0);
+  return Math.max(0, row.totalCents - refunded);
 }
 
-/** Refunds a paid order in full through PayPal. Throws OrderError. */
-export async function refundOrder(db: Database, payments: Payments, row: OrderRow) {
-  if (row.status === "REFUNDED") return row;
-  if (row.status !== "COMPLETED" || !row.captureId) {
+export async function recordRefund(db: Database, orderId: string, input: Omit<RefundEntry, "createdAt">) {
+  return db.transaction(async (transaction) => {
+    const [row] = await transaction.select().from(orders).where(eq(orders.id, orderId)).for("update");
+    if (!row) throw new OrderError("order_not_found", "Order not found.");
+    const refunds = row.refunds ?? [];
+    if (refunds.some((refund) => refund.id === input.id)) return row;
+
+    const entry: RefundEntry = { ...input, createdAt: new Date().toISOString() };
+    const nextRefunds = [...refunds, entry];
+    const refunded = nextRefunds.reduce((sum, refund) => sum + refund.cents, 0);
+    const [updated] = await transaction
+      .update(orders)
+      .set({
+        refunds: nextRefunds,
+        refundId: entry.id,
+        status: refunded >= row.totalCents ? "REFUNDED" : "PARTIALLY_REFUNDED",
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, orderId))
+      .returning();
+    return updated ?? row;
+  });
+}
+
+function formatUsdCents(cents: number) {
+  return `$${Math.floor(cents / 100).toLocaleString("en-US")}.${String(cents % 100).padStart(2, "0")}`;
+}
+
+/** Refunds a paid order in full or part through PayPal. Throws OrderError. */
+export async function refundOrder(
+  db: Database,
+  payments: Payments,
+  row: OrderRow,
+  input: { amountCents?: number; reason: RefundReason; note?: string }
+) {
+  if ((row.status !== "COMPLETED" && row.status !== "PARTIALLY_REFUNDED") || !row.captureId) {
     throw new OrderError("not_refundable", "Only paid orders can be refunded.");
   }
+  const refunded = (row.refunds ?? []).reduce((sum, refund) => sum + refund.cents, 0);
+  const remaining = row.totalCents - refunded;
+  const amount = input.amountCents ?? remaining;
+  if (!Number.isSafeInteger(amount) || amount < 1 || amount > remaining) {
+    throw new OrderError("invalid_amount", `Refund between $0.01 and ${formatUsdCents(Math.max(0, remaining))}.`);
+  }
+  const note = input.note?.trim() || null;
+  const requestId = `refund-${row.id}-${refunded}-${amount}`;
+  const options = {
+    ...(amount < remaining ? { amountCents: amount, currency: row.currency } : {}),
+    ...(note ? { noteToPayer: note } : {}),
+  };
+  let refund: Awaited<ReturnType<Payments["refundCapture"]>>;
   try {
-    const refund = await payments.refundCapture(row.captureId, `refund-${row.id}`);
-    return markRefunded(db, row.id, refund.refundId);
+    refund = await payments.refundCapture(row.captureId, requestId, Object.keys(options).length ? options : undefined);
   } catch (error) {
-    if (error instanceof PayPalApiError && error.issue === "CAPTURE_FULLY_REFUNDED") return markRefunded(db, row.id, null);
+    if (error instanceof PayPalApiError && error.issue === "CAPTURE_FULLY_REFUNDED") {
+      return recordRefund(db, row.id, { id: "paypal-full", cents: remaining, reason: input.reason, note });
+    }
     throw paymentsError(error);
   }
+  return recordRefund(db, row.id, { id: refund.refundId, cents: refund.cents ?? amount, reason: input.reason, note });
 }

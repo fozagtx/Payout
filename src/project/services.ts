@@ -89,6 +89,7 @@ export interface ShippingAddress {
 export interface Refund {
   refundId: string;
   status: string;
+  cents?: number;
 }
 
 export interface Dispute {
@@ -113,8 +114,12 @@ export interface Payments {
   createOrder(input: CreatePaymentInput): Promise<PaymentOrder>;
   getOrder(paypalOrderId: string): Promise<PaymentOrder>;
   captureOrder(paypalOrderId: string): Promise<PaymentOrder>;
-  /** Refunds a capture in full. `requestId` makes retries idempotent. */
-  refundCapture(captureId: string, requestId: string): Promise<Refund>;
+  /** Refunds a capture. `requestId` makes retries idempotent. */
+  refundCapture(
+    captureId: string,
+    requestId: string,
+    options?: { amountCents?: number; currency?: string; noteToPayer?: string }
+  ): Promise<Refund>;
   listDisputes(): Promise<Dispute[]>;
   /** Asks PayPal whether a webhook delivery is genuine. False when no webhook id is configured. */
   verifyWebhook(delivery: WebhookDelivery): Promise<boolean>;

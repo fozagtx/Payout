@@ -1,3 +1,5 @@
+import type { RefundEntry } from "../project/refund-types.js";
+
 export type User = { id: string; username: string; paypalEmail: string | null; createdAt: string };
 
 export type Connection = {
@@ -24,6 +26,8 @@ export type Order = {
   status: string;
   approveUrl?: string | null;
   totalCents: number;
+  refundedCents?: number;
+  refunds?: RefundEntry[];
   currency: string;
   items: OrderItem[];
   dispute?: { id: string; status: string | null; reason: string | null } | null;

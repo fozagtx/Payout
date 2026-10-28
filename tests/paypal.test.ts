@@ -183,6 +183,34 @@ describe("createPayPalPayments", () => {
     expect(call!.body).toBe("{}");
   });
 
+  it("sends a partial refund amount and buyer note", async () => {
+    const { payments, apiCalls } = paypal(() => ({
+      body: { id: "REF-1", status: "COMPLETED", amount: { value: "10.00", currency_code: "USD" } },
+    }));
+    const refund = await payments.refundCapture("CAP1", "refund-request-1", {
+      amountCents: 1000,
+      currency: "USD",
+      noteToPayer: "Thanks for your patience.",
+    });
+    expect(refund).toEqual({ refundId: "REF-1", status: "COMPLETED", cents: 1000 });
+    const [call] = apiCalls();
+    expect(call!.url).toBe(`${BASE}/v2/payments/captures/CAP1/refund`);
+    expect(call!.headers["paypal-request-id"]).toBe("refund-request-1");
+    expect(JSON.parse(call!.body!)).toEqual({
+      amount: { value: "10.00", currency_code: "USD" },
+      note_to_payer: "Thanks for your patience.",
+    });
+  });
+
+  it("sends an empty body for a full refund without options", async () => {
+    const { payments, apiCalls } = paypal(() => ({ body: { id: "REF-FULL", status: "COMPLETED" } }));
+    expect(await payments.refundCapture("CAP1", "refund-request-full")).toEqual({
+      refundId: "REF-FULL",
+      status: "COMPLETED",
+    });
+    expect(apiCalls()[0]!.body).toBe("{}");
+  });
+
   it("surfaces ORDER_NOT_APPROVED as a typed error without credentials", async () => {
     const { payments } = paypal(() => ({
       status: 422,

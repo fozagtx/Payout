@@ -102,16 +102,23 @@ export function CheckoutComplete() {
     );
   }
 
-  const paid = state.status === "ready" && state.order.status.toUpperCase() === "COMPLETED";
+  const paid =
+    state.status === "ready" &&
+    ["COMPLETED", "PARTIALLY_REFUNDED"].includes(state.order.status.toUpperCase());
 
   if (paid && !errorCode) {
+    const partiallyRefunded = state.order.status.toUpperCase() === "PARTIALLY_REFUNDED";
     return (
       <div className="text-center">
         <StatusIcon tone="green">
           <CheckIcon className="h-8 w-8" />
         </StatusIcon>
-        <h1 className="mt-5 text-[32px] leading-[1.05] font-semibold tracking-[-0.045em] text-ink sm:text-[40px]">Payment complete</h1>
-        <p className="mt-2 text-ink-soft">Thanks! PayPal confirmed your payment.</p>
+        <h1 className="mt-5 text-[32px] leading-[1.05] font-semibold tracking-[-0.045em] text-ink sm:text-[40px]">
+          {partiallyRefunded ? "Order partially refunded" : "Payment complete"}
+        </h1>
+        <p className="mt-2 text-ink-soft">
+          {partiallyRefunded ? "PayPal confirmed a partial refund for this order." : "Thanks! PayPal confirmed your payment."}
+        </p>
         <OrderSummary order={state.order} />
         <ReturnHint />
         {actions}
