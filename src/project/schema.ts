@@ -1,10 +1,11 @@
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import type { RefundEntry } from "./refund-types.js";
+import type { RefundEntry, RefundRequest } from "./refund-types.js";
 
 /** Shoppers. Signed in with username + password; the kit's connections point here. */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
+  usernameKey: text("username_key"),
   passwordHash: text("password_hash").notNull(),
   /** Sandbox PayPal login the shopper linked in the dashboard; pre-fills checkout. */
   paypalEmail: text("paypal_email"),
@@ -36,6 +37,7 @@ export const orders = pgTable(
     shipping: jsonb("shipping"),
     refundId: text("refund_id"),
     refunds: jsonb("refunds").$type<RefundEntry[]>().notNull().default([]),
+    refundRequest: jsonb("refund_request").$type<RefundRequest | null>(),
     disputeId: text("dispute_id"),
     disputeStatus: text("dispute_status"),
     disputeReason: text("dispute_reason"),

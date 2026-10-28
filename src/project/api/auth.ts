@@ -2,7 +2,8 @@ import express, { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { hashPassword, validateCredentials, verifyPassword } from "../../lib/password.js";
+import { hashPassword, usernameKey, validateCredentials, verifyPassword } from "../../lib/password.js";
+import { isMerchant } from "../admin.js";
 import { users } from "../schema.js";
 import { safeNext, type AppSession } from "../session.js";
 
@@ -40,8 +41,8 @@ export function createAuthRouter(db: Database, session: AppSession) {
       }
       const [user] = await db
         .insert(users)
-        .values({ username, passwordHash: await hashPassword(password) })
-        .onConflictDoNothing({ target: users.username })
+        .values({ username, usernameKey: usernameKey(username), passwordHash: await hashPassword(password) })
+        .onConflictDoNothing()
         .returning({ id: users.id });
       if (!user) {
         const [existing] = await db
@@ -55,7 +56,10 @@ export function createAuthRouter(db: Database, session: AppSession) {
           response.status(200).json({ ok: true, next: target });
           return;
         }
-        response.status(409).json({ error: "username_taken", message: "That username is taken. If it's yours, log in instead." });
+        response.status(409).json({
+          error: "username_taken",
+          message: "That username is taken or too close to an existing one. If it's yours, log in instead.",
+        });
         return;
       }
       session.start(response, user.id);
@@ -111,7 +115,7 @@ export function createAuthRouter(db: Database, session: AppSession) {
         response.status(401).json({ error: "not_signed_in" });
         return;
       }
-      response.json({ user });
+      response.json({ user: { ...user, role: isMerchant(user.username) ? "merchant" : "buyer" } });
     } catch (error) {
       next(error);
     }

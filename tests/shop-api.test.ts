@@ -10,12 +10,13 @@ let alice: { cookie: string; userId: string; token: string };
 let bob: { cookie: string; userId: string };
 
 beforeAll(async () => {
+  process.env.PAYOUT_ADMIN_USERNAMES = "alice";
   server = await startServer({ catalog: fakeCatalog(), payments: paypal.payments });
   const a = await signUp(server.baseUrl, "alice");
   alice = { ...a, token: (await issueAccessToken(server.db, server.baseUrl, a.userId)).token };
   bob = await signUp(server.baseUrl, "bob");
 });
-afterAll(() => server.close());
+afterAll(() => { delete process.env.PAYOUT_ADMIN_USERNAMES; return server.close(); });
 
 async function newOrder(items = [{ product_id: "shoe", quantity: 1 }]) {
   const { data, isError } = await callTool(server.baseUrl, alice.token, "create_checkout", { items });
@@ -101,7 +102,7 @@ describe("GET /api/orders", () => {
     expect(body.orders.length).toBeGreaterThanOrEqual(5);
     const first = body.orders[0];
     expect(Object.keys(first).sort()).toEqual(
-      ["approveUrl", "createdAt", "currency", "dispute", "id", "items", "paypalOrderId", "refundedCents", "refunds", "shipping", "status", "totalCents"]
+      ["approveUrl", "createdAt", "currency", "dispute", "id", "items", "paypalOrderId", "refundRequest", "refundedCents", "refunds", "shipping", "status", "totalCents"]
     );
     const times = body.orders.map((o: any) => Date.parse(o.createdAt));
     expect([...times].sort((x: number, y: number) => y - x)).toEqual(times);
@@ -152,9 +153,9 @@ describe("shipping, refunds and webhooks", () => {
 
   it("fully refunds a paid order with its reason, and only for its owner", async () => {
     const order = await paidOrder();
-    expect((await post(`/api/orders/${order.id}/refund`, {})).status).toBe(401);
-    expect((await post(`/api/orders/${order.id}/refund`, {}, { cookie: bob.cookie })).status).toBe(404);
-    const response = await post(`/api/orders/${order.id}/refund`, { reason: "changed_mind" }, { cookie: alice.cookie });
+    expect((await post(`/api/merchant/orders/${order.id}/refund`, {})).status).toBe(401);
+    expect((await post(`/api/merchant/orders/${order.id}/refund`, {}, { cookie: bob.cookie })).status).toBe(403);
+    const response = await post(`/api/merchant/orders/${order.id}/refund`, { reason: "changed_mind" }, { cookie: alice.cookie });
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.order).toMatchObject({
@@ -167,7 +168,7 @@ describe("shipping, refunds and webhooks", () => {
       requestId: `refund-${order.id}-0-4999`,
       options: undefined,
     });
-    const again = await post(`/api/orders/${order.id}/refund`, { reason: "other" }, { cookie: alice.cookie });
+    const again = await post(`/api/merchant/orders/${order.id}/refund`, { reason: "other" }, { cookie: alice.cookie });
     expect(again.status).toBe(409);
     expect((await again.json()).error).toBe("not_refundable");
   });
@@ -175,7 +176,7 @@ describe("shipping, refunds and webhooks", () => {
   it("partially refunds, rejects more than the remaining amount, then refunds the rest", async () => {
     const order = await paidOrder();
     const partial = await post(
-      `/api/orders/${order.id}/refund`,
+      `/api/merchant/orders/${order.id}/refund`,
       { amountCents: 1000, reason: "damaged_or_defective", note: "Thanks for your patience." },
       { cookie: alice.cookie }
     );
@@ -195,7 +196,7 @@ describe("shipping, refunds and webhooks", () => {
     });
 
     const tooMuch = await post(
-      `/api/orders/${order.id}/refund`,
+      `/api/merchant/orders/${order.id}/refund`,
       { amountCents: 4000, reason: "other" },
       { cookie: alice.cookie }
     );
@@ -203,7 +204,7 @@ describe("shipping, refunds and webhooks", () => {
     expect((await tooMuch.json()).error).toBe("invalid_amount");
 
     const rest = await post(
-      `/api/orders/${order.id}/refund`,
+      `/api/merchant/orders/${order.id}/refund`,
       { amountCents: 3999, reason: "changed_mind" },
       { cookie: alice.cookie }
     );
@@ -217,11 +218,11 @@ describe("shipping, refunds and webhooks", () => {
 
   it("validates the refund reason and buyer note", async () => {
     const order = await paidOrder();
-    const missingReason = await post(`/api/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
+    const missingReason = await post(`/api/merchant/orders/${order.id}/refund`, {}, { cookie: alice.cookie });
     expect(missingReason.status).toBe(400);
     expect((await missingReason.json()).error).toBe("invalid_request");
     const longNote = await post(
-      `/api/orders/${order.id}/refund`,
+      `/api/merchant/orders/${order.id}/refund`,
       { reason: "other", note: "x".repeat(256) },
       { cookie: alice.cookie }
     );
@@ -231,7 +232,7 @@ describe("shipping, refunds and webhooks", () => {
 
   it("won't refund an unpaid order", async () => {
     const order = await newOrder();
-    const response = await post(`/api/orders/${order.id}/refund`, { reason: "other" }, { cookie: alice.cookie });
+    const response = await post(`/api/merchant/orders/${order.id}/refund`, { reason: "other" }, { cookie: alice.cookie });
     expect(response.status).toBe(409);
     expect((await response.json()).error).toBe("not_refundable");
   });
@@ -264,7 +265,7 @@ describe("shipping, refunds and webhooks", () => {
   it("deduplicates a refund webhook for our refund and records new partial PayPal refunds", async () => {
     const order = await paidOrder();
     const result = await post(
-      `/api/orders/${order.id}/refund`,
+      `/api/merchant/orders/${order.id}/refund`,
       { amountCents: 1000, reason: "other" },
       { cookie: alice.cookie }
     );

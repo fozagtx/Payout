@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { orders } from "../src/project/schema.js";
 import type { Product } from "@channel3/sdk/resources";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
 import type { SelectedOptions } from "../src/project/services.js";
@@ -68,13 +69,27 @@ let server: TestServer;
 let token: string;
 const paypal = fakePayments();
 let userId: string;
+let buyerToken: string;
+let buyerOrderId: string;
 
 beforeAll(async () => {
+  process.env.PAYOUT_ADMIN_USERNAMES = "claude_user";
   server = await startServer({ storefront, catalog: fakeCatalog(), payments: paypal.payments });
   ({ userId } = await signUp(server.baseUrl, "claude_user"));
   token = (await issueAccessToken(server.db, server.baseUrl, userId)).token;
+  const buyer = await signUp(server.baseUrl, "ordinary_buyer");
+  buyerToken = (await issueAccessToken(server.db, server.baseUrl, buyer.userId)).token;
+  const [order] = await server.db.insert(orders).values({
+    userId: buyer.userId,
+    status: "COMPLETED",
+    currency: "USD",
+    totalCents: 2500,
+    items: [{ productId: "shoe", title: "Shoe", quantity: 1, unitCents: 2500, merchant: "shop.example" }],
+    captureId: "CAP-MCP-REQUEST",
+  }).returning();
+  buyerOrderId = order!.id;
 });
-afterAll(() => server.close());
+afterAll(() => { delete process.env.PAYOUT_ADMIN_USERNAMES; return server.close(); });
 
 describe("Channel3 MCP tools", () => {
   it("lists the new tools, with the grid UI on find_similar_products", async () => {
@@ -158,6 +173,15 @@ describe("Channel3 MCP tools", () => {
     const { data, isError } = await callTool(server.baseUrl, token, "get_earnings", { days: 14 });
     expect(isError).toBe(false);
     expect(data).toMatchObject({ clicks: 8, sales: 2, totals: { commission: 4, currency: "USD" } });
-    expect(earningsCalls.at(-1)).toEqual({ userId, days: 14 });
+    expect(earningsCalls.at(-1)).toEqual({ userId: undefined, days: 14 });
+  });
+
+  it("restricts buyer earnings and allows refund requests through MCP", async () => {
+    const denied = await callTool(server.baseUrl, buyerToken, "get_earnings", { days: 14 });
+    expect(denied.isError).toBe(true);
+    expect(denied.data).toMatchObject({ code: "merchant_only" });
+    const requested = await callTool(server.baseUrl, buyerToken, "request_refund", { order_id: buyerOrderId, reason: "other", amount_cents: 1000 });
+    expect(requested.isError).toBe(false);
+    expect(requested.data.order.refundRequest).toMatchObject({ status: "pending", amountCents: 1000 });
   });
 });

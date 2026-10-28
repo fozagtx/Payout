@@ -16,7 +16,8 @@ import {
   publicOrderView,
   recordRefund,
   remainingRefundCents,
-  refundOrder,
+  cancelRefundRequest,
+  requestRefund,
   syncOrder,
 } from "../orders.js";
 import type { Services } from "../services.js";
@@ -45,6 +46,7 @@ const refundRequestSchema = z.object({
  */
 export function createShopRouter(db: Database, session: AppSession, services: Services) {
   const router = Router();
+  router.use("/api", express.json({ limit: "16kb" }));
 
   router.get("/api/orders", async (request, response, next) => {
     try {
@@ -97,7 +99,7 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
     }
   });
 
-  router.post("/api/orders/:id/refund", async (request, response, next) => {
+  router.post("/api/orders/:id/refund-request", async (request, response, next) => {
     try {
       const userId = session.currentUserId(request);
       if (!userId) {
@@ -118,20 +120,37 @@ export function createShopRouter(db: Database, session: AppSession, services: Se
         return;
       }
       try {
-        response.json({
-          order: orderListView(
-            await refundOrder(db, services.payments, row, {
-              amountCents: parsed.data.amountCents,
-              reason: parsed.data.reason,
-              note: parsed.data.note || undefined,
-            })
-          ),
+        response.status(201).json({
+          order: orderListView(await requestRefund(db, row, parsed.data)),
         });
       } catch (caught) {
         if (!(caught instanceof OrderError)) throw caught;
         response
-          .status(caught.code === "not_refundable" || caught.code === "invalid_amount" ? 409 : 502)
+          .status(["not_refundable", "invalid_amount", "request_pending"].includes(caught.code) ? 409 : 502)
           .json({ error: caught.code, ...caught.toJSON() });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/api/orders/:id/refund-request", async (request, response, next) => {
+    try {
+      const userId = session.currentUserId(request);
+      if (!userId) {
+        response.status(401).json({ error: "not_signed_in" });
+        return;
+      }
+      const row = await findUserOrder(db, userId, request.params.id);
+      if (!row) {
+        response.status(404).json({ error: "no_pending_request" });
+        return;
+      }
+      try {
+        response.json({ order: orderListView(await cancelRefundRequest(db, row)) });
+      } catch (caught) {
+        if (!(caught instanceof OrderError)) throw caught;
+        response.status(caught.code === "no_pending_request" ? 404 : 502).json({ error: caught.code, ...caught.toJSON() });
       }
     } catch (error) {
       next(error);

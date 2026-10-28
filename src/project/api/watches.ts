@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Database } from "../../db/client.js";
 import { isInStock } from "../../lib/format.js";
 import { Channel3ProductProcessingError } from "../channel3/storefront.js";
+import { requireMerchant } from "../admin.js";
 import { priceWatches, webhookEvents } from "../schema.js";
 import type { Services } from "../services.js";
 import type { AppSession } from "../session.js";
@@ -87,6 +88,7 @@ function webhookPayload(body: unknown): WatchUpdate | undefined {
 
 export function createWatchesRouter(db: Database, session: AppSession, services: Services, webhookSecret?: string) {
   const router = Router();
+  router.use("/api/earnings", requireMerchant(db, session));
 
   router.post("/channel3/webhook", express.raw({ type: "*/*", limit: "256kb" }), async (request, response) => {
     if (!webhookSecret) {
@@ -295,11 +297,7 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
 
   router.get("/api/earnings", async (request, response, next) => {
     try {
-      const userId = session.currentUserId(request);
-      if (!userId) {
-        response.status(401).json({ error: "not_signed_in" });
-        return;
-      }
+      const userId = response.locals.userId as string;
       const rawDays = request.query.days === undefined ? "30" : String(request.query.days);
       const days = Number(rawDays);
       if (!Number.isInteger(days) || days < 1 || days > 90) {
@@ -311,7 +309,7 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
         return;
       }
       response.setHeader("cache-control", "no-store");
-      response.json(await services.storefront.earnings(userId, days));
+      response.json(await services.storefront.earnings(undefined, days));
     } catch (error) {
       next(error);
     }

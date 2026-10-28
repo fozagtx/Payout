@@ -20,10 +20,27 @@ export async function verifyPassword(password: string, stored: string) {
 }
 
 export const USERNAME_PATTERN = /^[a-z0-9_]{3,32}$/;
+const USERNAME_CONFUSABLES: Record<string, string> = {
+  "0": "o",
+  "1": "l",
+  i: "l",
+  "3": "e",
+  "5": "s",
+  _: "",
+};
+
+export function usernameKey(username: string) {
+  return username.toLowerCase().replace(/[01i35_]/g, (character) => USERNAME_CONFUSABLES[character] ?? character);
+}
+
+export const RESERVED_USERNAME_KEYS = new Set(
+  ["admin", "payout", "paypal", "support", "merchant", "root", "system", "help", "staff", "official"].map(usernameKey)
+);
 
 /** Returns a reason the credentials can't be used to sign up, or undefined. */
 export function validateCredentials(username: string, password: string) {
   if (!USERNAME_PATTERN.test(username)) return "Username must be 3–32 characters: a–z, 0–9 or _.";
+  if (RESERVED_USERNAME_KEYS.has(usernameKey(username))) return "That username is reserved.";
   if (password.length < 8) return "Password must be at least 8 characters.";
   if (password.length > 200) return "Password is too long.";
   return undefined;
