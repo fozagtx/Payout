@@ -17,6 +17,11 @@ const REASON_LABELS: Record<RefundReason, string> = {
   other: "Other",
 };
 
+const REQUEST_REASON_LABELS: Record<RefundReason, string> = {
+  ...REASON_LABELS,
+  changed_mind: "I changed my mind",
+};
+
 const REASONS = Object.entries(REASON_LABELS) as [RefundReason, string][];
 
 function parseAmountCents(value: string): number | undefined {
@@ -56,6 +61,7 @@ export function RefundDialog({
   const amountCents = partial ? parseAmountCents(amountInput) : remainingCents;
   const amountValid = amountCents !== undefined && amountCents > 0 && amountCents <= remainingCents;
   const trimmedNote = note.trim();
+  const reasonLabels = mode === "request" ? REQUEST_REASON_LABELS : REASON_LABELS;
 
   useEffect(() => {
     if (!open) return;
@@ -145,14 +151,16 @@ export function RefundDialog({
                   {REASONS.map(([value, label]) => (
                     <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-white/50 px-3 py-2 text-sm text-ink">
                       <input type="radio" name="refund-reason" checked={reason === value} onChange={() => setReason(value)} />
-                      {label}
+                      {mode === "request" ? reasonLabels[value] : label}
                     </label>
                   ))}
                 </div>
               </fieldset>
 
               <div>
-                <label htmlFor="refund-note" className="text-sm font-semibold text-ink">Message to buyer (optional)</label>
+                <label htmlFor="refund-note" className="text-sm font-semibold text-ink">
+                  {mode === "request" ? "Message to the store (optional)" : "Message to buyer (optional)"}
+                </label>
                 <textarea
                   id="refund-note"
                   value={note}
@@ -162,7 +170,11 @@ export function RefundDialog({
                   className="mt-2 block w-full resize-y rounded-xl border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 />
                 <div className="mt-1 flex justify-between gap-3 text-xs text-muted-foreground">
-                  <span>PayPal shows this to the buyer with the refund.</span>
+                  <span>
+                    {mode === "request"
+                      ? "The store sees this with your request."
+                      : "PayPal shows this to the buyer with the refund."}
+                  </span>
                   <span>{note.length}/255</span>
                 </div>
               </div>
@@ -181,19 +193,33 @@ export function RefundDialog({
               </div>
               <div className="space-y-4 rounded-xl border border-line bg-white/60 p-4 text-sm">
                 <p className="font-semibold text-ink">
-                  Refund {formatMoney(amountCents ?? 0, order.currency)} to {order.shipping?.name || "the buyer"} through PayPal Sandbox
+                  {mode === "request" ? (
+                    <>
+                      Request a refund of {formatMoney(amountCents ?? 0, order.currency)} from the store.
+                    </>
+                  ) : (
+                    <>
+                      Refund {formatMoney(amountCents ?? 0, order.currency)} to {order.shipping?.name || "the buyer"} through PayPal Sandbox
+                    </>
+                  )}
                 </p>
                 {mode === "merchant" && buyer ? <p className="text-xs text-ink-soft">Buyer: {buyer}</p> : null}
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reason</p>
-                  <p className="mt-1 text-ink">{reason ? REASON_LABELS[reason] : ""}</p>
+                  <p className="mt-1 text-ink">{reason ? reasonLabels[reason] : ""}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Message to buyer</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {mode === "request" ? "Message to the store" : "Message to buyer"}
+                  </p>
                   <p className="mt-1 whitespace-pre-wrap text-ink">{trimmedNote || "No message"}</p>
                 </div>
               </div>
-              <p className="text-sm font-medium text-amber-800">Refunds can&apos;t be undone.</p>
+              <p className="text-sm font-medium text-amber-800">
+                {mode === "request"
+                  ? "No money moves until the store approves. You can cancel while it's pending."
+                  : "Refunds can't be undone."}
+              </p>
               {serverError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{serverError}</p> : null}
               <DialogFooter>
                 <Button variant="secondary" onClick={() => { setServerError(null); setStep("details"); }} disabled={loading}>Back</Button>

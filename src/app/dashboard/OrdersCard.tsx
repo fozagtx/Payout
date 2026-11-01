@@ -40,9 +40,18 @@ export function OrdersCard() {
   const load = useCallback(async () => {
     setState({ status: "loading" });
     const result = await api<{ orders: Order[] }>("/api/orders");
-    if (result.ok) setState({ status: "ready", orders: result.data?.orders ?? [] });
-    else if (result.status === 404) setState({ status: "ready", orders: [] });
-    else setState({ status: "error", message: result.message });
+    if (result.ok || result.status === 404) {
+      const orders = result.ok ? result.data?.orders ?? [] : [];
+      const pendingOrderIds = new Set(
+        orders.filter((order) => order.refundRequest?.status === "pending").map((order) => order.id)
+      );
+      setState({ status: "ready", orders });
+      setRefundSuccess((current) =>
+        Object.fromEntries(Object.entries(current).filter(([id]) => pendingOrderIds.has(id)))
+      );
+    } else {
+      setState({ status: "error", message: result.message });
+    }
   }, []);
 
   async function checkDisputes() {
@@ -166,7 +175,10 @@ export function OrdersCard() {
                       <span>Refund requested · {formatMoney(pendingRequest.amountCents, order.currency)} · waiting for the store</span>
                       <Button variant="ghost" size="sm" onClick={async () => {
                         const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund-request`, { method: "DELETE" });
-                        if (result.ok) setState((current) => current.status === "ready" ? { status: "ready", orders: current.orders.map((item) => item.id === order.id ? result.data.order : item) } : current);
+                        if (result.ok) {
+                          setState((current) => current.status === "ready" ? { status: "ready", orders: current.orders.map((item) => item.id === order.id ? result.data.order : item) } : current);
+                          setRefundSuccess((current) => ({ ...current, [order.id]: "Refund request cancelled." }));
+                        }
                       }}>Cancel request</Button>
                     </div>
                   ) : order.refundRequest?.status === "declined" ? (
