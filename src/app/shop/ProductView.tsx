@@ -113,7 +113,7 @@ function WatchPrice({ product }: { product: Product }) {
   return (
     <div>
       {state.watching ? (
-        <p className="text-sm font-medium text-emerald-800">Watching — we'll flag drops in your dashboard</p>
+        <p className="text-sm font-medium text-emerald-800">Watching. We'll flag drops in your dashboard.</p>
       ) : (
         <Button variant="secondary" className="w-full" onClick={() => void watch()} loading={state.busy}>
           Watch price
@@ -124,7 +124,7 @@ function WatchPrice({ product }: { product: Product }) {
   );
 }
 
-/** PayPal Sandbox checkout for the exact variant on screen, at the cheapest in-stock store's price. */
+/** PayPal Sandbox checkout for the exact variant on screen, at the selected price. */
 function PayWithPayPal({ product, selection, resolving }: { product: Product; selection: Record<string, string>; resolving: boolean }) {
   const [state, setState] = useState<{ busy: boolean; error?: string }>({ busy: false });
   const best = [...(product.offers ?? [])].filter((offer) => isInStock(offer.availability)).sort((a, b) => a.price.price - b.price.price)[0];
@@ -159,7 +159,7 @@ function PayWithPayPal({ product, selection, resolving }: { product: Product; se
           <Button variant="paypal" className="mt-3 w-full" onClick={() => void pay()} loading={state.busy} disabled={resolving}>
             {state.busy ? null : <PayPalMark className="h-4 w-4" />} Pay with PayPal
           </Button>
-          <p className="mt-2 text-xs text-muted-foreground">Test money only. You’ll approve it on PayPal’s sandbox page.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Test mode: no real money is charged and no item is shipped.</p>
         </>
       ) : (
         <p className="text-sm text-ink-soft">

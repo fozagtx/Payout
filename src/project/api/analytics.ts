@@ -1,10 +1,10 @@
 import { Router } from "express";
+import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { requireMerchant } from "../admin.js";
-import { listAllOrders, orderView } from "../orders.js";
+import { listUserOrders, orderView } from "../orders.js";
 import { REFUND_REASON_LABELS } from "../refund-types.js";
 import { priceWatches } from "../schema.js";
-import type { OrderLine, Services, ShippingAddress } from "../services.js";
+import type { OrderLine } from "../services.js";
 import type { AppSession } from "../session.js";
 
 type StatusGroup = "Paid" | "Partially refunded" | "Refunded" | "Pending" | "Cancelled" | "Failed";
@@ -30,26 +30,26 @@ function utcDate(value: Date | string) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-export function createAnalyticsRouter(db: Database, session: AppSession, services: Services) {
+export function createAnalyticsRouter(db: Database, session: AppSession) {
   const router = Router();
   router.use("/api/analytics", (_request, response, next) => {
     response.setHeader("cache-control", "no-store");
     next();
   });
-  router.use("/api/analytics", requireMerchant(db, session));
-
   router.get("/api/analytics", async (request, response, next) => {
     try {
-      const rows = await listAllOrders(db, 1000);
-      const watches = await db.select().from(priceWatches);
-      const orders = rows.map(({ order: row, buyer }) => {
+      const userId = session.currentUserId(request);
+      if (!userId) {
+        response.status(401).json({ error: "not_signed_in" });
+        return;
+      }
+      const [rows, watches] = await Promise.all([
+        listUserOrders(db, userId, 500),
+        db.select().from(priceWatches).where(eq(priceWatches.userId, userId)),
+      ]);
+      const orders = rows.map((row) => {
         const items = orderView(row).items;
         const refundedCents = orderView(row).refundedCents;
-        const shipping = row.shipping as ShippingAddress | null;
         return {
           id: row.id,
           date: utcDate(row.createdAt),
@@ -63,11 +63,9 @@ export function createAnalyticsRouter(db: Database, session: AppSession, service
           disputeStatus: row.disputeStatus ?? null,
           merchant: items[0]?.merchant || "Unknown",
           itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-          shipCountry: shipping?.countryCode ?? null,
-          buyer,
         };
       });
-      const items = rows.flatMap(({ order: row }) =>
+      const items = rows.flatMap((row) =>
         (row.items as OrderLine[]).map((item) => ({
           orderId: row.id,
           title: item.title,
@@ -77,7 +75,7 @@ export function createAnalyticsRouter(db: Database, session: AppSession, service
           lineTotal: (item.unitCents * item.quantity) / 100,
         }))
       );
-      const refunds = rows.flatMap(({ order: row }) =>
+      const refunds = rows.flatMap((row) =>
         (row.refunds ?? []).map((refund) => ({
           orderId: row.id,
           date: utcDate(refund.createdAt),
@@ -99,44 +97,12 @@ export function createAnalyticsRouter(db: Database, session: AppSession, service
         date: utcDate(watch.createdAt),
       }));
 
-      let earnings: {
-        available: boolean;
-        message: string | null;
-        clicks: number;
-        transactions: { date: string; merchant: string; sale: number; commission: number; status: string }[];
-      } = {
-        available: false,
-        message: "Earnings need CHANNEL3_API_KEY on this server.",
-        clicks: 0,
-        transactions: [],
-      };
-      if (services.storefront) {
-        try {
-          const result = await services.storefront.earnings(undefined, 90);
-          earnings = {
-            available: true,
-            message: null,
-            clicks: result.clicks,
-            transactions: result.transactions.map((transaction) => ({
-              date: utcDate(transaction.date),
-              merchant: transaction.merchant,
-              sale: transaction.saleAmount,
-              commission: transaction.commission,
-              status: transaction.status,
-            })),
-          };
-        } catch (error) {
-          earnings = { available: false, message: errorMessage(error), clicks: 0, transactions: [] };
-        }
-      }
-
       response.json({
         licenseKey: process.env.AGGRID_LICENSE_KEY?.trim() || null,
         orders,
         items,
         refunds,
         watches: watchViews,
-        earnings,
       });
     } catch (error) {
       next(error);

@@ -1,7 +1,7 @@
 // End-to-end check of what web AI chat clients do against this server:
 // discover → register (DCR) or identify by URL (CIMD) → authorize → consent → token → /mcp.
 // Needs the server running locally (PUBLIC_API_URL=http://localhost:4000 enables loopback CIMD).
-// Without CHANNEL3_API_KEY the demo catalog is used, so search works offline.
+// Product search needs a configured Channel3 API key.
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 
@@ -89,14 +89,22 @@ const icon = m.body.result.serverInfo.icons?.[0];
 ok(m.body.result.serverInfo.title && icon?.src.endsWith("/favicon.svg"), "serverInfo carries brand title + icon");
 m = await mcp(tokens.access_token, "tools/list", {});
 const tools = m.body.result.tools;
-ok(tools.map((t) => t.name).sort().join(",") === "create_checkout,get_activity,get_order_status,get_product,list_orders,search_products,whoami", "tools/list");
+ok(
+  tools.map((t) => t.name).sort().join(",") ===
+    "compare_link,create_checkout,find_similar_products,get_activity,get_order_status,get_product,get_product_details,list_disputes,list_orders,list_price_watches,refund_order,search_products,watch_price,whoami",
+  "tools/list"
+);
 ok(tools.find((t) => t.name === "search_products")._meta?.ui?.resourceUri === "ui://payout/shop.html", "search_products renders the shop canvas");
 const whoamiTool = tools.find((t) => t.name === "whoami");
 ok(whoamiTool._meta?.["openai/profile"] === true && whoamiTool.outputSchema?.additionalProperties === false, "whoami is a ChatGPT profile tool");
 m = await mcp(tokens.access_token, "resources/read", { uri: "ui://payout/shop.html" });
 ok(m.body.result.contents[0].mimeType === "text/html;profile=mcp-app", "shop canvas resource is an MCP App");
 m = await mcp(tokens.access_token, "tools/call", { name: "search_products", arguments: { query: "shoes" } });
-ok(!m.body.result.isError && Array.isArray(m.body.result.structuredContent.products), "search_products");
+if (m.body.result.isError) {
+  ok(m.body.result.content?.some((item) => item.text?.includes("Product search isn't configured on this server (CHANNEL3_API_KEY missing)")), "search_products reports missing configuration honestly");
+} else {
+  ok(Array.isArray(m.body.result.structuredContent.products), "search_products");
+}
 m = await mcp(tokens.access_token, "tools/call", { name: "list_orders", arguments: {} });
 ok(Array.isArray(m.body.result.structuredContent.orders), "list_orders");
 m = await mcp(tokens.access_token, "tools/call", { name: "whoami", arguments: {} });

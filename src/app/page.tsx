@@ -6,7 +6,7 @@ import { PromptDock } from "./PromptDock.js";
 
 const steps = [
   { icon: UserIcon, title: "Create an account", body: "Pick a username and password. No email, no social login." },
-  { icon: LinkIcon, title: "Copy your MCP link", body: "Your dashboard has a personal connector URL ready to paste." },
+  { icon: LinkIcon, title: "Copy the connector URL", body: "Your dashboard has the connector URL ready to paste." },
   { icon: PlugIcon, title: "Connect in Claude", body: "Add Payout as a custom connector and approve access once." },
   { icon: ChatIcon, title: "Ask Claude to shop", body: "Browse, pick in the canvas, and pay with PayPal from the chat." },
 ];
@@ -47,9 +47,9 @@ export default function Home() {
             <BagIcon className="h-6 w-6 text-tan-ink" />
           </FloatingChip>
 
-          <div className="relative mx-auto max-w-5xl px-4 pt-16 pb-16 text-center sm:px-6 sm:pt-24 sm:pb-20">
+          <div className="relative mx-auto max-w-5xl overflow-x-hidden px-4 pt-16 pb-16 text-center sm:px-6 sm:pt-24 sm:pb-20">
             <p className="animate-rise inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 font-mono text-[11px] tracking-wider text-ink-soft uppercase">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Claude connector · PayPal Sandbox
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Works inside Claude &amp; ChatGPT
             </p>
             <h1 className="animate-rise mt-7 text-[44px] leading-[1.02] font-semibold tracking-[-0.055em] text-ink [animation-delay:60ms] sm:text-7xl md:text-[84px]">
               <span className="mark">Shop from Claude.</span>

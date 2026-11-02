@@ -54,9 +54,6 @@ function fakeStorefront() {
     async unsubscribe(subscriptionId) {
       subscriptions.canceled.push(subscriptionId);
     },
-    async earnings() {
-      return { clicks: 3, sales: 1, transactions: [], totals: { sales: 40, commission: 2, currency: "USD" } };
-    },
   };
   return { storefront, searches, resolves, lookups, subscriptions };
 }
@@ -136,7 +133,10 @@ describe("storefront without CHANNEL3_API_KEY", () => {
         body: JSON.stringify({ query: "shoes" }),
       });
       expect(response.status).toBe(503);
-      expect((await response.json()).error).toBe("search_not_configured");
+      expect(await response.json()).toMatchObject({
+        error: "search_not_configured",
+        message: "Product search isn't configured on this server (CHANNEL3_API_KEY missing)",
+      });
     } finally {
       http.close();
     }
@@ -161,6 +161,15 @@ describe("POST /api/shop/search", () => {
       imageUrl: "https://img.example/shoe.jpg",
       filters: { price: { max_price: 100 } },
       pageToken: "tok",
+    });
+  });
+
+  it("turns a typed dollar budget into a maximum price filter", async () => {
+    const response = await post("/api/shop/search", { query: "trail shoes under $120" });
+    expect(response.status).toBe(200);
+    expect(fake.searches.at(-1)).toMatchObject({
+      query: "trail shoes",
+      filters: { price: { max_price: 120 } },
     });
   });
 

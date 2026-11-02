@@ -23,18 +23,10 @@ export type AnalyticsData = {
     disputeStatus: string | null;
     merchant: string;
     itemCount: number;
-    shipCountry: string | null;
-    buyer: string;
   }[];
   items: { orderId: string; title: string; merchant: string; quantity: number; unitPrice: number; lineTotal: number }[];
   refunds: { orderId: string; date: string; amount: number; reason: string }[];
   watches: { id: string; title: string; startPrice: number | null; lastPrice: number | null; change: number | null; inStock: boolean | null; alert: string | null; date: string }[];
-  earnings: {
-    available: boolean;
-    message: string | null;
-    clicks: number;
-    transactions: { date: string; merchant: string; sale: number; commission: number; status: string }[];
-  };
 };
 
 type FieldSpec = [id: string, name: string, format: AgFormat, hide?: boolean];
@@ -60,8 +52,7 @@ export function buildStudioData(data: AnalyticsData): AgDataSourcesDefinition {
   return {
     formats: USD_FORMATS,
     description:
-      "Payout's own data for the signed-in merchant: PayPal Sandbox orders placed from Claude or the shop, their refunds and disputes, " +
-      "Channel3 price watches, and Channel3 affiliate commission. Money is in each order's currency (USD in practice).",
+      "Your PayPal Sandbox orders, refunds, disputes, and Channel3 price watches.",
     sources: [
       {
         id: "orders",
@@ -79,9 +70,7 @@ export function buildStudioData(data: AnalyticsData): AgDataSourcesDefinition {
             ["disputed", "Disputed orders", "integerFormat"],
             ["disputeStatus", "Dispute status", "textFormat"],
             ["merchant", "Store", "textFormat"],
-            ["buyer", "Buyer", "textFormat"],
             ["itemCount", "Items", "integerFormat"],
-            ["shipCountry", "Ship-to country", "textFormat"],
           ]),
       },
       {
@@ -112,7 +101,7 @@ export function buildStudioData(data: AnalyticsData): AgDataSourcesDefinition {
       {
         id: "watches",
         name: "Price watches",
-        description: "Products the merchant watches through Channel3 product subscriptions.",
+        description: "Products you watch through Channel3 product subscriptions.",
         data: data.watches,
         fields: fields([
           ["id", "Watch ID", "textFormat", true],
@@ -123,19 +112,6 @@ export function buildStudioData(data: AnalyticsData): AgDataSourcesDefinition {
           ["inStock", "In stock", "booleanFormat"],
           ["alert", "Latest alert", "textFormat"],
           ["date", "Watched since", "dateFormat"],
-        ]),
-      },
-      {
-        id: "commissions",
-        name: "Commissions",
-        description: "Channel3 affiliate sales from store links, last 90 days.",
-        data: data.earnings.transactions,
-        fields: fields([
-          ["date", "Sale date", "dateFormat"],
-          ["merchant", "Store", "textFormat"],
-          ["sale", "Sale amount", "currencyFormat"],
-          ["commission", "Commission", "currencyFormat"],
-          ["status", "Commission status", "textFormat"],
         ]),
       },
     ],
@@ -175,7 +151,6 @@ export const initialReport: AgReportState = {
         "kpi-orders": kpi("Orders", countd("orders.id")),
         "kpi-refund-rate": kpi("Refund rate", { id: "refundRate" }),
         "kpi-disputes": kpi("Disputed orders", sum("orders.disputed")),
-        "kpi-commission": kpi("Channel3 commission", sum("commissions.commission")),
         "revenue-by-store": {
           type: "column-chart-grouped",
           dataMapping: { categoryKey: [{ id: "orders.merchant" }], valueKey: [sum("orders.total"), sum("orders.refunded")] },
@@ -212,12 +187,10 @@ export const initialReport: AgReportState = {
               { id: "orders.date" },
               { id: "orders.id" },
               { id: "orders.merchant" },
-              { id: "orders.buyer" },
               { id: "orders.statusGroup" },
               sum("orders.total"),
               sum("orders.refunded"),
               { id: "orders.disputeStatus" },
-              { id: "orders.shipCountry" },
             ],
           },
           format: title("All orders"),
@@ -229,7 +202,6 @@ export const initialReport: AgReportState = {
         "kpi-orders": at(8, 0, 4, 7),
         "kpi-refund-rate": at(12, 0, 4, 7),
         "kpi-disputes": at(16, 0, 4, 7),
-        "kpi-commission": at(20, 0, 4, 7),
         "revenue-by-store": at(0, 7, 14, 17),
         "orders-by-status": at(14, 7, 10, 17),
         "revenue-by-day": at(0, 24, 14, 17),
@@ -238,11 +210,9 @@ export const initialReport: AgReportState = {
       },
     },
     {
-      id: "watches-earnings",
+      id: "watches",
       widgets: {
         "kpi-watching": kpi("Products watched", countd("watches.id")),
-        "kpi-sales": kpi("Affiliate sales", sum("commissions.sale")),
-        "kpi-commission-2": kpi("Commission", sum("commissions.commission")),
         "watches-grid": {
           type: "grid",
           dataMapping: {
@@ -258,18 +228,10 @@ export const initialReport: AgReportState = {
           },
           format: title("Price watches"),
         },
-        "commission-by-store": {
-          type: "column-chart-grouped",
-          dataMapping: { categoryKey: [{ id: "commissions.merchant" }], valueKey: [sum("commissions.commission")] },
-          format: title("Commission by store"),
-        },
       },
       widgetLayout: {
         "kpi-watching": at(0, 0, 8, 7),
-        "kpi-sales": at(8, 0, 8, 7),
-        "kpi-commission-2": at(16, 0, 8, 7),
-        "watches-grid": at(0, 7, 14, 20),
-        "commission-by-store": at(14, 7, 10, 20),
+        "watches-grid": at(0, 7, 24, 20),
       },
     },
   ],

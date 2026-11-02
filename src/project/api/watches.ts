@@ -5,7 +5,6 @@ import { z } from "zod";
 import type { Database } from "../../db/client.js";
 import { isInStock } from "../../lib/format.js";
 import { Channel3ProductProcessingError } from "../channel3/storefront.js";
-import { requireMerchant } from "../admin.js";
 import { priceWatches, webhookEvents } from "../schema.js";
 import type { Services } from "../services.js";
 import type { AppSession } from "../session.js";
@@ -88,8 +87,6 @@ function webhookPayload(body: unknown): WatchUpdate | undefined {
 
 export function createWatchesRouter(db: Database, session: AppSession, services: Services, webhookSecret?: string) {
   const router = Router();
-  router.use("/api/earnings", requireMerchant(db, session));
-
   router.post("/channel3/webhook", express.raw({ type: "*/*", limit: "256kb" }), async (request, response) => {
     if (!webhookSecret) {
       response.status(503).json({ error: "channel3_webhook_not_configured", message: "Channel3 webhook signing isn't configured on this server." });
@@ -290,26 +287,6 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
       const others = await db.select({ id: priceWatches.id }).from(priceWatches).where(eq(priceWatches.productId, watch.productId)).limit(1);
       if (!others.length && watch.subscriptionId) await services.storefront.unsubscribe(watch.subscriptionId);
       response.json({ ok: true });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.get("/api/earnings", async (request, response, next) => {
-    try {
-      const userId = response.locals.userId as string;
-      const rawDays = request.query.days === undefined ? "30" : String(request.query.days);
-      const days = Number(rawDays);
-      if (!Number.isInteger(days) || days < 1 || days > 90) {
-        response.status(400).json({ error: "invalid_request", message: "days must be a whole number from 1 to 90." });
-        return;
-      }
-      if (!services.storefront) {
-        response.status(503).json({ error: "search_not_configured", message: "Earnings reporting needs CHANNEL3_API_KEY on this server." });
-        return;
-      }
-      response.setHeader("cache-control", "no-store");
-      response.json(await services.storefront.earnings(undefined, days));
     } catch (error) {
       next(error);
     }

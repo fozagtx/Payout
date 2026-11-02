@@ -32,7 +32,7 @@ const toCatalogProduct = (product: unknown) => normaliseProduct(product as Param
 
 const NO_STOREFRONT = {
   code: "search_not_configured",
-  message: "This needs CHANNEL3_API_KEY on the Payout server.",
+  message: "This store doesn't offer that feature.",
 };
 
 function errorMessage(error: unknown) {
@@ -107,9 +107,9 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
     {
       title: "Search products",
       description:
-        "Search real products from online stores and show them to the user in an interactive product grid " +
-        "inside the chat. In that grid the user can select items, choose quantities, and pay with PayPal " +
-        "(they approve the payment on PayPal; no money moves without their approval). Call this whenever the " +
+        "Search the live Channel3 catalog and show matching products in an interactive product grid " +
+        "inside the chat. In that grid the user can select items, choose quantities, and pay with PayPal Sandbox. " +
+        "No real money is charged and no item is shipped. Call this whenever the " +
         "user wants to shop, browse, find, compare or buy something, e.g. \"find me running shoes under $100\". " +
         "Use a short, concrete search query (product type plus key attributes). Afterwards, briefly comment " +
         "on the results instead of repeating the whole list, since the user already sees the grid.",
@@ -131,27 +131,33 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
       if (error) return result(error, true);
       const logged = { query: args.query, max_price: args.max_price, limit: args.limit, image_url: args.image_url };
       if (args.image_url && !services.storefront) {
-        return result({ code: "search_not_configured", message: "Image search needs CHANNEL3_API_KEY on the Payout server." }, true);
+        return result({ code: "search_not_configured", message: "Product search isn't configured on this server (CHANNEL3_API_KEY missing)" }, true);
       }
+      const budget = args.query.match(/\bunder\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
+      const query = budget ? args.query.replace(budget[0], "").trim() : args.query;
+      const maxPrice = args.max_price ?? (budget ? Number(budget[1]!.replaceAll(",", "")) : undefined);
       let products: Product[];
       try {
         if (args.image_url && services.storefront) {
           const page = await services.storefront.search({
-            query: args.query,
+            query,
             imageUrl: args.image_url,
-            filters: { availability: ["InStock"], ...(args.max_price !== undefined ? { price: { max_price: args.max_price } } : {}) },
+            filters: { availability: ["InStock"], ...(maxPrice !== undefined ? { price: { max_price: maxPrice } } : {}) },
             userId: context.userId,
           });
           products = page.products.map(toCatalogProduct).filter((p): p is Product => p !== undefined).slice(0, args.limit);
         } else {
-          products = await services.catalog.search(args.query, {
+          products = await services.catalog.search(query, {
             limit: args.limit,
-            ...(args.max_price !== undefined ? { maxPriceCents: Math.round(args.max_price * 100) } : {}),
+            ...(maxPrice !== undefined ? { maxPriceCents: Math.round(maxPrice * 100) } : {}),
           });
         }
       } catch (caught) {
         const message = errorMessage(caught);
         await logTool(db, context.connectionId, "search_products", logged, "error", message);
+        if (message.includes("CHANNEL3_API_KEY missing")) {
+          return result({ code: "search_not_configured", message: "Product search isn't configured on this server (CHANNEL3_API_KEY missing)" }, true);
+        }
         return result({ code: "catalog_unavailable", message: "Product search is unavailable right now. Try again shortly." }, true);
       }
       await logTool(db, context.connectionId, "search_products", logged, "allowed");

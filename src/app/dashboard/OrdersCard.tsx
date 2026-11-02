@@ -1,73 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, type Order, type ShippingAddress } from "@/components/api.js";
+import { api, type Order } from "@/components/api.js";
 import { ButtonAnchor, Button } from "@/components/Button.js";
 import { Card, CardHeader } from "@/components/Card.js";
 import { formatDate, formatMoney } from "@/components/format.js";
 import { BagIcon } from "@/components/Icons.js";
 import { Thumb } from "@/components/Thumb.js";
 import { orderStatus, StatusPill } from "@/components/StatusPill.js";
-import type { RefundReason } from "@/project/refund-types.js";
+import { REFUND_REASON_LABELS } from "@/project/refund-types.js";
 import { RefundDialog } from "./RefundDialog.js";
 
 type State = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; orders: Order[] };
 
-const REFUND_REASON_LABELS: Record<RefundReason, string> = {
-  item_not_received: "Item not received",
-  damaged_or_defective: "Damaged or defective",
-  not_as_described: "Not as described",
-  changed_mind: "Buyer changed their mind",
-  duplicate_order: "Duplicate order",
-  other: "Other",
-};
-
-function shippingLine(shipping: ShippingAddress) {
-  return [shipping.name, shipping.line1, shipping.line2, [shipping.city, shipping.state, shipping.postalCode].filter(Boolean).join(" "), shipping.countryCode]
-    .filter(Boolean)
-    .join(", ");
-}
-
 export function OrdersCard() {
   const [state, setState] = useState<State>({ status: "loading" });
   const [refundOrder, setRefundOrder] = useState<Order | null>(null);
-  const [refundMode, setRefundMode] = useState<"request" | "merchant">("request");
   const [refundSuccess, setRefundSuccess] = useState<Record<string, string>>({});
-  const [checkingDisputes, setCheckingDisputes] = useState(false);
-  const [disputesError, setDisputesError] = useState<string | null>(null);
-  const [disputesResult, setDisputesResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
     const result = await api<{ orders: Order[] }>("/api/orders");
     if (result.ok || result.status === 404) {
       const orders = result.ok ? result.data?.orders ?? [] : [];
-      const pendingOrderIds = new Set(
-        orders.filter((order) => order.refundRequest?.status === "pending").map((order) => order.id)
-      );
       setState({ status: "ready", orders });
-      setRefundSuccess((current) =>
-        Object.fromEntries(Object.entries(current).filter(([id]) => pendingOrderIds.has(id)))
-      );
     } else {
       setState({ status: "error", message: result.message });
     }
   }, []);
-
-  async function checkDisputes() {
-    setCheckingDisputes(true);
-    setDisputesError(null);
-    setDisputesResult(null);
-    const result = await api<{ disputes: unknown[] }>("/api/disputes");
-    setCheckingDisputes(false);
-    if (!result.ok) {
-      setDisputesError(result.message);
-      return;
-    }
-    await load();
-    const count = result.data.disputes.length;
-    setDisputesResult(count === 0 ? "No disputes on your orders." : `${count} ${count === 1 ? "dispute" : "disputes"} found — shown on the order.`);
-  }
 
   useEffect(() => {
     void load();
@@ -79,18 +39,13 @@ export function OrdersCard() {
       <CardHeader
         icon={<BagIcon />}
         title="Orders"
-        description="Everything you’ve bought through Claude."
+        description="Your orders from Channel3."
         action={<div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => void checkDisputes()} disabled={checkingDisputes}>
-            Check disputes
-          </Button>
           <Button variant="ghost" size="sm" onClick={() => void load()} disabled={state.status === "loading"}>
             Refresh
           </Button>
         </div>}
       />
-      {disputesError ? <p className="px-5 pt-3 text-xs text-red-700 sm:px-6" role="alert">{disputesError}</p> : null}
-      {disputesResult ? <p className="px-5 pt-3 text-xs text-ink-soft sm:px-6" role="status">{disputesResult}</p> : null}
       <div>
         {state.status === "loading" ? (
           <div className="space-y-3 px-5 py-5 sm:px-6" aria-hidden="true">
@@ -123,7 +78,6 @@ export function OrdersCard() {
               const count = items.reduce((n, i) => n + (i.quantity || 0), 0);
               const first = items[0];
               const refundedCents = order.refundedCents ?? order.refunds?.reduce((sum, refund) => sum + refund.cents, 0) ?? 0;
-              const pendingRequest = order.refundRequest?.status === "pending" ? order.refundRequest : null;
               return (
                 <li key={order.id} className="px-5 py-4 sm:px-6">
                   <div className="flex items-start justify-between gap-3">
@@ -160,29 +114,10 @@ export function OrdersCard() {
                       </div>
                     </div>
                   </div>
-                  {order.shipping ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-ink-soft">Ships to</span> {shippingLine(order.shipping)}
-                    </p>
-                  ) : null}
                   {order.dispute ? (
                     <p className={`mt-2 text-xs font-semibold ${["OPEN", "UNDER_REVIEW"].includes(order.dispute.status ?? "") ? "text-red-700" : "text-amber-800"}`}>
                       Disputed · {order.dispute.reason ?? "Reason unavailable"} · {order.dispute.status ?? "Status unavailable"}
                     </p>
-                  ) : null}
-                  {pendingRequest ? (
-                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-amber-800">
-                      <span>Refund requested · {formatMoney(pendingRequest.amountCents, order.currency)} · waiting for the store</span>
-                      <Button variant="ghost" size="sm" onClick={async () => {
-                        const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund-request`, { method: "DELETE" });
-                        if (result.ok) {
-                          setState((current) => current.status === "ready" ? { status: "ready", orders: current.orders.map((item) => item.id === order.id ? result.data.order : item) } : current);
-                          setRefundSuccess((current) => ({ ...current, [order.id]: "Refund request cancelled." }));
-                        }
-                      }}>Cancel request</Button>
-                    </div>
-                  ) : order.refundRequest?.status === "declined" ? (
-                    <p className="mt-2 text-xs text-amber-800">Refund request declined{order.refundRequest.merchantMessage ? `: ${order.refundRequest.merchantMessage}` : ""}</p>
                   ) : null}
                   {order.refunds?.length ? (
                     <div className="mt-3 rounded-xl bg-cream/70 px-3 py-2.5">
@@ -210,10 +145,9 @@ export function OrdersCard() {
                   {order.status === "COMPLETED" || order.status === "PARTIALLY_REFUNDED" ? (
                     <div className="mt-3 flex items-center justify-end gap-3">
                       {refundSuccess[order.id] ? <span className="text-xs text-emerald-800" role="status">{refundSuccess[order.id]}</span> : null}
-                      {!pendingRequest ? <Button variant="secondary" size="sm" onClick={() => { setRefundMode("request"); setRefundOrder(order); }}>
-                        Request refund
+                      <Button variant="secondary" size="sm" onClick={() => setRefundOrder(order)}>
+                        Refund order
                       </Button>
-                      : null}
                     </div>
                   ) : null}
                 </li>
@@ -225,7 +159,6 @@ export function OrdersCard() {
     </Card>
     <RefundDialog
       order={refundOrder}
-      mode={refundMode}
       open={refundOrder !== null}
       onOpenChange={(open) => { if (!open) setRefundOrder(null); }}
       onRefundSuccess={(updatedOrder, amountCents) => {
@@ -234,7 +167,7 @@ export function OrdersCard() {
             ? { status: "ready", orders: current.orders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)) }
             : current
         );
-        setRefundSuccess((current) => ({ ...current, [updatedOrder.id]: refundMode === "request" ? `Refund requested ${formatMoney(amountCents, updatedOrder.currency)}.` : `Refunded ${formatMoney(amountCents, updatedOrder.currency)}.` }));
+        setRefundSuccess((current) => ({ ...current, [updatedOrder.id]: `Refunded ${formatMoney(amountCents, updatedOrder.currency)} through PayPal.` }));
       }}
     />
     </>

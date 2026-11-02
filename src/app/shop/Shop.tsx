@@ -97,11 +97,11 @@ function ShopPage() {
 
             {status.isLoading ? null : !ready ? (
               <Notice
-                title={status.isError ? "We couldn’t reach the shop" : "Product search isn’t set up yet"}
+                title={status.isError ? "We couldn’t reach the shop" : "Search unavailable"}
                 body={
                   status.isError
                     ? "The server didn’t answer. Refresh to try again."
-                    : "This server has no CHANNEL3_API_KEY. Add it to the server’s environment and restart to turn on search."
+                    : "Product search isn't configured on this server (CHANNEL3_API_KEY missing)"
                 }
               />
             ) : (

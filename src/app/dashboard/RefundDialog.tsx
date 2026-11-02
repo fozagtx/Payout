@@ -12,14 +12,9 @@ const REASON_LABELS: Record<RefundReason, string> = {
   item_not_received: "Item not received",
   damaged_or_defective: "Damaged or defective",
   not_as_described: "Not as described",
-  changed_mind: "Buyer changed their mind",
+  changed_mind: "I changed my mind",
   duplicate_order: "Duplicate order",
   other: "Other",
-};
-
-const REQUEST_REASON_LABELS: Record<RefundReason, string> = {
-  ...REASON_LABELS,
-  changed_mind: "I changed my mind",
 };
 
 const REASONS = Object.entries(REASON_LABELS) as [RefundReason, string][];
@@ -36,17 +31,11 @@ export function RefundDialog({
   open,
   onOpenChange,
   onRefundSuccess,
-  mode = "merchant",
-  initial,
-  buyer,
 }: {
   order: Order | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRefundSuccess: (order: Order, amountCents: number) => void;
-  mode?: "request" | "merchant";
-  initial?: { amountCents: number; reason: RefundReason; note?: string };
-  buyer?: string;
 }) {
   const [step, setStep] = useState<"details" | "review">("details");
   const [partial, setPartial] = useState(false);
@@ -61,16 +50,13 @@ export function RefundDialog({
   const amountCents = partial ? parseAmountCents(amountInput) : remainingCents;
   const amountValid = amountCents !== undefined && amountCents > 0 && amountCents <= remainingCents;
   const trimmedNote = note.trim();
-  const reasonLabels = mode === "request" ? REQUEST_REASON_LABELS : REASON_LABELS;
-
   useEffect(() => {
     if (!open) return;
     setStep("details");
-    const remaining = order ? (order.totalCents - (order.refundedCents ?? order.refunds?.reduce((sum, refund) => sum + refund.cents, 0) ?? 0)) : 0;
-    setPartial(Boolean(initial && initial.amountCents < remaining));
-    setAmountInput(initial ? (initial.amountCents / 100).toFixed(2) : "");
-    setReason(initial?.reason ?? "");
-    setNote(initial?.note ?? "");
+    setPartial(false);
+    setAmountInput("");
+    setReason("");
+    setNote("");
     setLoading(false);
     setServerError(null);
   }, [open, order?.id]);
@@ -79,8 +65,7 @@ export function RefundDialog({
     if (!order || !reason || amountCents === undefined || !amountValid) return;
     setLoading(true);
     setServerError(null);
-    const path = mode === "request" ? `/api/orders/${order.id}/refund-request` : `/api/merchant/orders/${order.id}/refund`;
-    const result = await api<{ order: Order }>(path, {
+    const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund`, {
       method: "POST",
       body: {
         ...(partial ? { amountCents } : {}),
@@ -106,7 +91,7 @@ export function RefundDialog({
               <div className="flex items-start gap-3">
                 <Thumb src={order.items[0]?.imageUrl} alt={order.items[0]?.title ?? ""} className="h-14 w-14 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <DialogTitle>{mode === "request" ? "Request a refund" : "Refund order"}</DialogTitle>
+                  <DialogTitle>Refund order</DialogTitle>
                   <DialogDescription className="mt-1 truncate">{order.items[0]?.title ?? "Order"}</DialogDescription>
                   <p className="mt-1 text-sm text-ink-soft">Paid {formatMoney(order.totalCents, order.currency)}</p>
                   {refundedCents > 0 ? (
@@ -119,7 +104,7 @@ export function RefundDialog({
                 <legend className="mb-2 text-sm font-semibold text-ink">Amount</legend>
                 <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-white/60 px-3 py-2.5 text-sm text-ink">
                   <input type="radio" name="refund-amount" checked={!partial} onChange={() => setPartial(false)} />
-                  <span>Full refund — {formatMoney(remainingCents, order.currency)}</span>
+                  <span>Full refund: {formatMoney(remainingCents, order.currency)}</span>
                 </label>
                 <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${partial ? "border-brand bg-white" : "border-line bg-white/60"}`}>
                   <input type="radio" name="refund-amount" checked={partial} onChange={() => setPartial(true)} />
@@ -151,7 +136,7 @@ export function RefundDialog({
                   {REASONS.map(([value, label]) => (
                     <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-white/50 px-3 py-2 text-sm text-ink">
                       <input type="radio" name="refund-reason" checked={reason === value} onChange={() => setReason(value)} />
-                      {mode === "request" ? reasonLabels[value] : label}
+                      {label}
                     </label>
                   ))}
                 </div>
@@ -159,7 +144,7 @@ export function RefundDialog({
 
               <div>
                 <label htmlFor="refund-note" className="text-sm font-semibold text-ink">
-                  {mode === "request" ? "Message to the store (optional)" : "Message to buyer (optional)"}
+                  Note for PayPal (optional)
                 </label>
                 <textarea
                   id="refund-note"
@@ -171,9 +156,7 @@ export function RefundDialog({
                 />
                 <div className="mt-1 flex justify-between gap-3 text-xs text-muted-foreground">
                   <span>
-                    {mode === "request"
-                      ? "The store sees this with your request."
-                      : "PayPal shows this to the buyer with the refund."}
+                    PayPal receives this note with the refund.
                   </span>
                   <span>{note.length}/255</span>
                 </div>
@@ -188,42 +171,31 @@ export function RefundDialog({
           ) : (
             <>
               <div>
-                <DialogTitle>{mode === "request" ? "Send refund request" : "Review refund"}</DialogTitle>
-                <DialogDescription className="mt-1">{mode === "request" ? "The store reviews refund requests before any money moves." : "Check the details before sending this refund."}</DialogDescription>
+                <DialogTitle>Review refund</DialogTitle>
+                <DialogDescription className="mt-1">Check the details before sending this refund.</DialogDescription>
               </div>
               <div className="space-y-4 rounded-xl border border-line bg-white/60 p-4 text-sm">
                 <p className="font-semibold text-ink">
-                  {mode === "request" ? (
-                    <>
-                      Request a refund of {formatMoney(amountCents ?? 0, order.currency)} from the store.
-                    </>
-                  ) : (
-                    <>
-                      Refund {formatMoney(amountCents ?? 0, order.currency)} to {order.shipping?.name || "the buyer"} through PayPal Sandbox
-                    </>
-                  )}
+                  Refund {formatMoney(amountCents ?? 0, order.currency)} through PayPal.
                 </p>
-                {mode === "merchant" && buyer ? <p className="text-xs text-ink-soft">Buyer: {buyer}</p> : null}
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Reason</p>
-                  <p className="mt-1 text-ink">{reason ? reasonLabels[reason] : ""}</p>
+                  <p className="mt-1 text-ink">{reason ? REASON_LABELS[reason] : ""}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {mode === "request" ? "Message to the store" : "Message to buyer"}
+                    Note for PayPal
                   </p>
                   <p className="mt-1 whitespace-pre-wrap text-ink">{trimmedNote || "No message"}</p>
                 </div>
               </div>
               <p className="text-sm font-medium text-amber-800">
-                {mode === "request"
-                  ? "No money moves until the store approves. You can cancel while it's pending."
-                  : "Refunds can't be undone."}
+                Refunds can't be undone.
               </p>
               {serverError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{serverError}</p> : null}
               <DialogFooter>
                 <Button variant="secondary" onClick={() => { setServerError(null); setStep("details"); }} disabled={loading}>Back</Button>
-                <Button onClick={() => void confirmRefund()} loading={loading}>{mode === "request" ? "Send request" : "Confirm refund"}</Button>
+                <Button onClick={() => void confirmRefund()} loading={loading}>Refund through PayPal</Button>
               </DialogFooter>
             </>
           )

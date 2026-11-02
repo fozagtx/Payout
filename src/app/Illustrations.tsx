@@ -160,7 +160,7 @@ export function OrderPreview() {
       <div className="mt-3 space-y-2 font-mono text-[12px] text-ink-soft">
         <div className="flex justify-between"><span>1 × Road runner</span><span>$109.00</span></div>
         <div className="flex justify-between"><span>1 × Wool socks</span><span>$14.00</span></div>
-        <div className="flex justify-between border-t border-dashed border-line-strong pt-2 text-ink"><span>item_total</span><span>$123.00</span></div>
+        <div className="flex justify-between border-t border-dashed border-line-strong pt-2 text-ink"><span>Total</span><span>$123.00</span></div>
       </div>
       <div className="mt-4 flex h-10 items-center justify-center gap-1.5 rounded-xl bg-paypal text-sm font-semibold text-navy">
         <PayPalMark className="h-4 w-4" /> Pay with PayPal

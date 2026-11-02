@@ -3,19 +3,10 @@
 import { useState } from "react";
 import { Card, CardBody, CardHeader } from "@/components/Card.js";
 import { CopyButton } from "@/components/CopyButton.js";
-import { AlertIcon, ChevronIcon, PlugIcon, SparkIcon, TerminalIcon } from "@/components/Icons.js";
+import { ChevronIcon, PlugIcon, SparkIcon, TerminalIcon } from "@/components/Icons.js";
 import { Pill } from "@/components/StatusPill.js";
 
-const SAMPLE_PROMPT = "Find me running shoes under $120 and show them so I can pick";
-
-function isPublicHttps(url: string) {
-  try {
-    const u = new URL(url);
-    return u.protocol === "https:" && !["localhost", "127.0.0.1", "0.0.0.0", "[::1]"].includes(u.hostname);
-  } catch {
-    return false;
-  }
-}
+const SAMPLE_PROMPT = "Show me what this store sells";
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
@@ -34,21 +25,21 @@ const Kbd = ({ children }: { children: React.ReactNode }) => (
 
 export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; connected: boolean }) {
   const [codeOpen, setCodeOpen] = useState(false);
+  const [chatGPTOpen, setChatGPTOpen] = useState(false);
   const url = mcpUrl ?? "";
   const cliCommand = `claude mcp add --transport http payout ${url || "<your MCP URL>"}`;
-  const local = Boolean(url) && !isPublicHttps(url);
 
   return (
     <Card>
       <CardHeader
         icon={<PlugIcon />}
-        title="Connect to Claude"
+        title="Your connector"
         description="Add Payout as a custom connector so Claude can search products and check you out."
         action={connected ? <Pill tone="green">Connected</Pill> : <Pill tone="amber">Not connected yet</Pill>}
       />
       <CardBody className="space-y-6">
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your MCP connector URL</label>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Connector URL (same for everyone)</label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-line bg-cream px-3.5 py-2.5 font-mono text-sm text-ink">
               {mcpUrl === null ? (
@@ -59,17 +50,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
             </div>
             <CopyButton text={url} label="Copy URL" className="sm:w-36" />
           </div>
-          {local ? (
-            <p className="mt-2.5 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              <AlertIcon className="mt-px h-4 w-4" />
-              <span>
-                Claude can only reach a <strong>public HTTPS</strong> URL. When running locally, expose this server with a tunnel (for
-                example ngrok or cloudflared) and set the public URL in your server config.
-              </span>
-            </p>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">The URL must be public HTTPS so Claude can reach it.</p>
-          )}
+          <p className="mt-3 text-sm"><a className="text-brand underline" href="/shop">No paid Claude plan? Shop on the web instead →</a></p>
         </div>
 
         <div>
@@ -113,6 +94,16 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
               </div>
             </div>
           ) : null}
+        </div>
+
+        <div className="rounded-xl border border-line">
+          <button type="button" onClick={() => setChatGPTOpen((value) => !value)} aria-expanded={chatGPTOpen} className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-ink hover:bg-cream">
+            <span>Using ChatGPT?</span>
+            <ChevronIcon className={`h-4 w-4 text-muted-foreground transition-transform ${chatGPTOpen ? "rotate-180" : ""}`} />
+          </button>
+          {chatGPTOpen ? <p className="border-t border-line px-4 py-4 text-sm leading-relaxed text-ink-soft">
+            ChatGPT (Plus/Pro) → Settings → Apps &amp; Connectors → Advanced settings → turn on Developer mode → Create connector → paste the connector URL → Authentication: OAuth → sign in to Payout and Allow.
+          </p> : null}
         </div>
 
         <div className="rounded-xl bg-cream p-4 ring-1 ring-line">

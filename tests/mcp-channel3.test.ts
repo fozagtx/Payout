@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { orders } from "../src/project/schema.js";
 import type { Product } from "@channel3/sdk/resources";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
 import type { SelectedOptions } from "../src/project/services.js";
@@ -23,7 +22,6 @@ const sdkProduct = (id: string, price = 42): Product => ({
 const searches: StorefrontSearch[] = [];
 const retrieves: { id: string; options?: SelectedOptions }[] = [];
 const lookups: string[] = [];
-const earningsCalls: { userId?: string; days?: number }[] = [];
 const subscriptions = { requested: [] as string[], canceled: [] as string[] };
 const storefront: Storefront = {
   async search(input) {
@@ -54,15 +52,6 @@ const storefront: Storefront = {
   async unsubscribe(subscriptionId) {
     subscriptions.canceled.push(subscriptionId);
   },
-  async earnings(userId, days) {
-    earningsCalls.push({ ...(userId ? { userId } : {}), ...(days === undefined ? {} : { days }) });
-    return {
-      clicks: 8,
-      sales: 2,
-      transactions: [{ date: "2026-10-01T00:00:00.000Z", merchant: "Acme", saleAmount: 40, commission: 4, currency: "USD", status: "PAID" }],
-      totals: { sales: 40, commission: 4, currency: "USD" },
-    };
-  },
 };
 
 let server: TestServer;
@@ -73,29 +62,25 @@ let buyerToken: string;
 let buyerOrderId: string;
 
 beforeAll(async () => {
-  process.env.PAYOUT_ADMIN_USERNAMES = "claude_user";
   server = await startServer({ storefront, catalog: fakeCatalog(), payments: paypal.payments });
   ({ userId } = await signUp(server.baseUrl, "claude_user"));
   token = (await issueAccessToken(server.db, server.baseUrl, userId)).token;
   const buyer = await signUp(server.baseUrl, "ordinary_buyer");
   buyerToken = (await issueAccessToken(server.db, server.baseUrl, buyer.userId)).token;
-  const [order] = await server.db.insert(orders).values({
-    userId: buyer.userId,
-    status: "COMPLETED",
-    currency: "USD",
-    totalCents: 2500,
-    items: [{ productId: "shoe", title: "Shoe", quantity: 1, unitCents: 2500, merchant: "shop.example" }],
-    captureId: "CAP-MCP-REQUEST",
-  }).returning();
-  buyerOrderId = order!.id;
+  const { data: checkout } = await callTool(server.baseUrl, buyerToken, "create_checkout", {
+    items: [{ product_id: "shoe", quantity: 1 }],
+  });
+  paypal.approve(checkout.order.paypalOrderId);
+  await callTool(server.baseUrl, buyerToken, "get_order_status", { order_id: checkout.order.id });
+  buyerOrderId = checkout.order.id;
 });
-afterAll(() => { delete process.env.PAYOUT_ADMIN_USERNAMES; return server.close(); });
+afterAll(() => server.close());
 
 describe("Channel3 MCP tools", () => {
   it("lists the new tools, with the grid UI on find_similar_products", async () => {
     const { tools } = await mcpCall(server.baseUrl, token, "tools/list");
     const names = tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["get_product_details", "find_similar_products", "compare_link", "list_disputes", "get_earnings"]));
+    expect(names).toEqual(expect.arrayContaining(["get_product_details", "find_similar_products", "compare_link", "list_disputes", "refund_order"]));
     expect(tools.find((t: any) => t.name === "find_similar_products")._meta["ui/resourceUri"]).toBeDefined();
     expect(tools.find((t: any) => t.name === "search_products").inputSchema.properties).toHaveProperty("image_url");
   });
@@ -106,6 +91,18 @@ describe("Channel3 MCP tools", () => {
     expect(searches.at(-1)).toMatchObject({ query: "shoe", imageUrl: "https://img.example/shoe.jpg", filters: { price: { max_price: 80 } } });
     expect(data.products).toHaveLength(1);
     expect(data.products[0]).toMatchObject({ id: "img1", priceCents: 4200, merchant: "cheap.example" });
+  });
+
+  it("turns a typed dollar budget into a maximum price filter", async () => {
+    const { isError } = await callTool(server.baseUrl, token, "search_products", {
+      query: "trail shoes under $120",
+      image_url: "https://img.example/shoe.jpg",
+    });
+    expect(isError).toBe(false);
+    expect(searches.at(-1)).toMatchObject({
+      query: "trail shoes",
+      filters: { price: { max_price: 120 } },
+    });
   });
 
   it("get_product_details returns sizes, stores cheapest first and the price verdict", async () => {
@@ -169,19 +166,17 @@ describe("Channel3 MCP tools", () => {
     ]);
   });
 
-  it("returns per-user Channel3 earnings", async () => {
-    const { data, isError } = await callTool(server.baseUrl, token, "get_earnings", { days: 14 });
-    expect(isError).toBe(false);
-    expect(data).toMatchObject({ clicks: 8, sales: 2, totals: { commission: 4, currency: "USD" } });
-    expect(earningsCalls.at(-1)).toEqual({ userId: undefined, days: 14 });
-  });
-
-  it("restricts buyer earnings and allows refund requests through MCP", async () => {
-    const denied = await callTool(server.baseUrl, buyerToken, "get_earnings", { days: 14 });
-    expect(denied.isError).toBe(true);
-    expect(denied.data).toMatchObject({ code: "merchant_only" });
-    const requested = await callTool(server.baseUrl, buyerToken, "request_refund", { order_id: buyerOrderId, reason: "other", amount_cents: 1000 });
-    expect(requested.isError).toBe(false);
-    expect(requested.data.order.refundRequest).toMatchObject({ status: "pending", amountCents: 1000 });
+  it("refunds the signed-in user's own order through MCP", async () => {
+    const refunded = await callTool(server.baseUrl, buyerToken, "refund_order", {
+      order_id: buyerOrderId,
+      reason: "other",
+      amount_cents: 1000,
+    });
+    expect(refunded.isError).toBe(false);
+    expect(refunded.data.order).toMatchObject({
+      status: "PARTIALLY_REFUNDED",
+      refundedCents: 1000,
+      refunds: [{ cents: 1000, reason: "other" }],
+    });
   });
 });

@@ -67,7 +67,7 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
     if (services.storefront) return services.storefront;
     response.status(503).json({
       error: "search_not_configured",
-      message: "Product search isn't set up on this server yet: CHANNEL3_API_KEY is missing.",
+      message: "Product search isn't configured on this server (CHANNEL3_API_KEY missing)",
     });
     return undefined;
   }
@@ -103,12 +103,19 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
       const storefront = store(response);
       if (!storefront) return;
       const { query, imageUrl, base64Image, pageToken } = parsed.data;
+      const budget = query?.match(/\bunder\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
+      const cleanQuery = budget ? query?.replace(budget[0], "").trim() : query;
+      const existingFilters = (parsed.data.filters ?? {}) as Record<string, unknown>;
+      const existingPrice = (existingFilters.price ?? {}) as Record<string, unknown>;
+      const searchFilters = budget
+        ? { ...existingFilters, price: { ...existingPrice, max_price: Number(budget[1]!.replaceAll(",", "")) } }
+        : existingFilters;
       const page = await storefront.search({
-        ...(query ? { query } : {}),
+        ...(cleanQuery ? { query: cleanQuery } : {}),
         ...(imageUrl ? { imageUrl } : {}),
         ...(base64Image ? { base64Image } : {}),
         ...(pageToken ? { pageToken } : {}),
-        filters: (parsed.data.filters ?? {}) as SearchFilters,
+        filters: searchFilters as SearchFilters,
         userId: userId(request),
       });
       response.setHeader("cache-control", "no-store");

@@ -8,15 +8,13 @@ import {
   OrderError,
   createCheckout,
   findUserOrder,
-  cancelRefundRequest,
-  requestRefund,
+  refundOrder,
   listUserOrders,
   orderListView,
   orderView,
   syncOrder,
   type OrderView,
 } from "../orders.js";
-import { userWithRole } from "../admin.js";
 import { REFUND_REASONS } from "../refund-types.js";
 import { formatCents } from "../paypal/client.js";
 import type { Services } from "../services.js";
@@ -32,7 +30,7 @@ const money = (cents: number, currency: string) => `${formatCents(cents)} ${curr
 function orderResult(order: OrderView, text: string) {
   const structuredContent = { order } as Record<string, unknown>;
   return {
-    content: [{ type: "text" as const, text: `${text}\n\n${JSON.stringify(structuredContent)}` }],
+    content: [{ type: "text" as const, text: `${text}\n\nTest mode: no real money is charged and no item is shipped.\n\n${JSON.stringify(structuredContent)}` }],
     structuredContent,
   };
 }
@@ -67,7 +65,7 @@ export function registerCheckoutTools(server: McpServer, db: Database, services:
         "Before calling this, confirm the exact items, quantities and total with the user and get their go-ahead. " +
         "Pass only product ids and quantities: prices are always re-read from the catalog, never taken from you. " +
         "Returns an order with an approveUrl. Give the user that link: they log in to PayPal and approve the payment there. " +
-        "No money moves until they approve. Afterwards use get_order_status to confirm the payment.",
+        "Test mode: no real money is charged and no item is shipped. Afterwards use get_order_status to confirm the payment.",
       inputSchema: {
         items: z
           .array(
@@ -205,83 +203,31 @@ export function registerCheckoutTools(server: McpServer, db: Database, services:
     }
   );
 
-  server.registerTool(
-    "get_earnings",
-    {
-      title: "Get Channel3 earnings",
-      description: "Show the store owner's Channel3 clicks, sales and commission for a recent reporting window.",
-      inputSchema: { days: z.number().int().min(1).max(90).default(30).describe("Reporting window in days, from 1 to 90.") },
-      annotations: { readOnlyHint: true, openWorldHint: true },
-    },
-    async (args, extra) => {
-      const { context, error } = await toolContext(db, extra.authInfo, "orders:read");
-      if (error) return result(error, true);
-      const user = await userWithRole(db, context.userId);
-      if (user?.role !== "merchant") {
-        await logTool(db, context.connectionId, "get_earnings", args, "rejected", "merchant_only");
-        return result({ code: "merchant_only", message: "Earnings are only available to the store owner." }, true);
-      }
-      if (!services.storefront) {
-        return result({ code: "search_not_configured", message: "Earnings reporting needs CHANNEL3_API_KEY on the Payout server." }, true);
-      }
-      try {
-        const earnings = await services.storefront.earnings(undefined, args.days);
-        await logTool(db, context.connectionId, "get_earnings", args, "allowed");
-        const summary = `${earnings.clicks} clicks, ${earnings.sales} sales, ${earnings.totals.commission.toFixed(2)} ${earnings.totals.currency} commission in the last ${args.days} days. Channel3 reporting may lag.`;
-        return {
-          content: [{ type: "text" as const, text: `${summary}\n${JSON.stringify(earnings)}` }],
-          structuredContent: earnings,
-        };
-      } catch (caught) {
-        await logTool(db, context.connectionId, "get_earnings", args, "error", caught instanceof Error ? caught.message : String(caught));
-        return result({ code: "reporting_unavailable", message: "Channel3 earnings are unavailable right now." }, true);
-      }
-    }
-  );
-
-  server.registerTool("request_refund", {
-    title: "Request a refund",
-    description: "Ask the store owner to review a refund request for one of your paid orders. No money moves until approved.",
+  server.registerTool("refund_order", {
+    title: "Refund order",
+    description: "Refund one of your paid orders through PayPal, full or partial.",
     inputSchema: {
       order_id: z.uuid(),
       reason: z.enum(REFUND_REASONS),
       amount_cents: z.number().int().positive().optional(),
       note: z.string().trim().max(255).optional(),
     },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
   }, async (args, extra) => {
     const { context, error } = await toolContext(db, extra.authInfo, "shop:checkout");
     if (error) return result(error, true);
     const row = await findUserOrder(db, context.userId, args.order_id);
-    if (!row) return result({ code: "order_not_found", message: "No order with that id for this account." }, true);
-    try {
-      const updated = await requestRefund(db, row, { amountCents: args.amount_cents, reason: args.reason, note: args.note });
-      await logTool(db, context.connectionId, "request_refund", args, "allowed");
-      return result({ order: orderListView(updated) });
-    } catch (caught) {
-      if (!(caught instanceof OrderError)) throw caught;
-      await logTool(db, context.connectionId, "request_refund", args, "rejected", caught.code);
-      return result(caught.toJSON(), true);
+    if (!row) {
+      await logTool(db, context.connectionId, "refund_order", args, "rejected", "order_not_found");
+      return result({ code: "order_not_found", message: "No order with that id for this account." }, true);
     }
-  });
-
-  server.registerTool("cancel_refund_request", {
-    title: "Cancel refund request",
-    description: "Cancel a pending refund request for one of your orders.",
-    inputSchema: { order_id: z.uuid() },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, async (args, extra) => {
-    const { context, error } = await toolContext(db, extra.authInfo, "shop:checkout");
-    if (error) return result(error, true);
-    const row = await findUserOrder(db, context.userId, args.order_id);
-    if (!row) return result({ code: "no_pending_request", message: "There is no pending refund request." }, true);
     try {
-      const updated = await cancelRefundRequest(db, row);
-      await logTool(db, context.connectionId, "cancel_refund_request", args, "allowed");
+      const updated = await refundOrder(db, services.payments, row, { amountCents: args.amount_cents, reason: args.reason, note: args.note });
+      await logTool(db, context.connectionId, "refund_order", args, "allowed");
       return result({ order: orderListView(updated) });
     } catch (caught) {
       if (!(caught instanceof OrderError)) throw caught;
-      await logTool(db, context.connectionId, "cancel_refund_request", args, "rejected", caught.code);
+      await logTool(db, context.connectionId, "refund_order", args, "rejected", caught.code);
       return result(caught.toJSON(), true);
     }
   });

@@ -10,7 +10,6 @@ const originalLicenseKey = process.env.AGGRID_LICENSE_KEY;
 
 beforeAll(async () => {
   delete process.env.AGGRID_LICENSE_KEY;
-  process.env.PAYOUT_ADMIN_USERNAMES = "analytics_user";
   server = await startServer();
   alice = await signUp(server.baseUrl, "analytics_user");
   const [order] = await server.db
@@ -53,7 +52,6 @@ beforeAll(async () => {
 afterAll(async () => {
   if (originalLicenseKey === undefined) delete process.env.AGGRID_LICENSE_KEY;
   else process.env.AGGRID_LICENSE_KEY = originalLicenseKey;
-  delete process.env.PAYOUT_ADMIN_USERNAMES;
   await server.close();
 });
 
@@ -91,8 +89,6 @@ describe("GET /api/analytics", () => {
         disputeStatus: "UNDER_REVIEW",
         merchant: "Trail Goods",
         itemCount: 3,
-        shipCountry: "CA",
-        buyer: "analytics_user",
       },
     ]);
     expect(body.items).toEqual([
@@ -119,13 +115,6 @@ describe("GET /api/analytics", () => {
         date: "2024-06-08",
       },
     ]);
-    expect(body.earnings).toEqual({
-      available: false,
-      message: "Earnings need CHANNEL3_API_KEY on this server.",
-      clicks: 0,
-      transactions: [],
-    });
-
     process.env.AGGRID_LICENSE_KEY = "  AGSTUDIO-TEST-KEY  ";
     const licensedResponse = await getAnalytics(alice.cookie);
     expect((await licensedResponse.json()).licenseKey).toBe("AGSTUDIO-TEST-KEY");

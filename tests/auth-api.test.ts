@@ -65,7 +65,7 @@ describe("username + password auth", () => {
     expect(unknownUser.status).toBe(401);
     expect(await unknownUser.json()).toEqual({
       error: "unknown_user",
-      message: "No account with that username. Create one — it takes a few seconds.",
+      message: "No account with that username. Create one in a few seconds.",
     });
     const ok = await post("/api/auth/login", { username: "bob_1", password: "password123", next: "/connect?requestId=abc" });
     expect(await ok.json()).toEqual({ ok: true, next: "/connect?requestId=abc" });
@@ -78,16 +78,7 @@ describe("username + password auth", () => {
     const { cookie } = await signUp(server.baseUrl, "dana");
     const me = await (await fetch(`${server.baseUrl}/api/me`, { headers: { cookie } })).json();
     expect(me.user.username).toBe("dana");
-    expect(me.user.role).toBe("buyer");
     expect(me.user).not.toHaveProperty("passwordHash");
-  });
-
-  it("derives merchant role from the live username list", async () => {
-    const { cookie } = await signUp(server.baseUrl, "merchantcase");
-    process.env.PAYOUT_ADMIN_USERNAMES = " MerchantCase ,other";
-    const me = await (await fetch(`${server.baseUrl}/api/me`, { headers: { cookie } })).json();
-    expect(me.user.role).toBe("merchant");
-    delete process.env.PAYOUT_ADMIN_USERNAMES;
   });
 
   it("links and unlinks a PayPal sandbox email", async () => {
