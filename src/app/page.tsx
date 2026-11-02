@@ -1,7 +1,7 @@
 import { Footer, Header } from "@/components/Header.js";
-import { BagIcon, ChatIcon, LinkIcon, PayPalMark, PlugIcon, ShieldIcon, TerminalIcon, UserIcon } from "@/components/Icons.js";
+import { ChatIcon, LinkIcon, PayPalMark, PlugIcon, ShieldIcon, TerminalIcon, UserIcon } from "@/components/Icons.js";
 import { HeroCtas } from "./HeroCtas.js";
-import { CanvasPreview, ClaudeMark, FloatingChip, HeroTiles, OrderPreview } from "./Illustrations.js";
+import { CanvasPreview, ChatGPTMark, ClaudeMark, FloatingChip, HeroTiles, OrderPreview } from "./Illustrations.js";
 import { PromptDock } from "./PromptDock.js";
 
 const steps = [
@@ -44,12 +44,19 @@ export default function Home() {
             <PayPalMark className="h-7 w-7" />
           </FloatingChip>
           <FloatingChip className="top-56 right-[15%]" rotate="-5deg">
-            <BagIcon className="h-6 w-6 text-tan-ink" />
+            <ChatGPTMark className="h-6 w-6 text-ink" />
           </FloatingChip>
 
           <div className="relative mx-auto max-w-5xl overflow-x-hidden px-4 pt-16 pb-16 text-center sm:px-6 sm:pt-24 sm:pb-20">
-            <p className="animate-rise inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 font-mono text-[11px] tracking-wider text-ink-soft uppercase">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Works inside Claude &amp; ChatGPT
+            <p className="animate-rise inline-flex items-center gap-2.5 rounded-full border border-line bg-paper py-1.5 pr-4 pl-3 text-[13px] font-medium text-ink-soft">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Works inside
+              <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                <ClaudeMark className="h-4 w-4" /> Claude
+              </span>
+              <span aria-hidden="true">&amp;</span>
+              <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                <ChatGPTMark className="h-4 w-4" /> ChatGPT
+              </span>
             </p>
             <h1 className="animate-rise mt-7 text-[44px] leading-[1.02] font-semibold tracking-[-0.055em] text-ink [animation-delay:60ms] sm:text-7xl md:text-[84px]">
               <span className="mark">Shop from Claude.</span>
