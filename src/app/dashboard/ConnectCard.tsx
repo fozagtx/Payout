@@ -6,7 +6,7 @@ import { CopyButton } from "@/components/CopyButton.js";
 import { ChevronIcon, PlugIcon, SparkIcon, TerminalIcon } from "@/components/Icons.js";
 import { Pill } from "@/components/StatusPill.js";
 
-const SAMPLE_PROMPT = "Show me what this store sells";
+const SAMPLE_PROMPT = "Find me running shoes under $120";
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
