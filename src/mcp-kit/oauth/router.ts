@@ -157,7 +157,7 @@ export function createOAuthRouter(options: McpKitOptions) {
         const userId = response.locals.userId as string;
         const requestId = String(request.body?.requestId ?? "");
         if (!tokenMatches(consentToken(requestId, userId), request.body?.csrf)) {
-          response.status(403).json({ error: "invalid_consent" });
+          sendPage(response, renderExpiredPage(options.branding), 400);
           return;
         }
         const redirectUrl =
@@ -166,6 +166,10 @@ export function createOAuthRouter(options: McpKitOptions) {
             : await provider.deny(requestId);
         response.redirect(303, redirectUrl);
       } catch (error) {
+        if (error instanceof Error && error.message === "invalid_consent") {
+          sendPage(response, renderExpiredPage(options.branding), 400);
+          return;
+        }
         next(error);
       }
     }

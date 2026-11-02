@@ -12,7 +12,8 @@ import { fetchLookup, fetchSearch, getCategory, searchBrands, searchCategories, 
 
 const productFromUrl = () => new URLSearchParams(window.location.search).get("product");
 
-function ShopPage() {
+function ShopPage({ embedded }: { embedded: boolean }) {
+  const shopPath = embedded ? "/dashboard/shop" : "/shop";
   const status = useQuery({ queryKey: ["shop-status"], queryFn: shopStatus });
   const [productId, setProductId] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -27,20 +28,20 @@ function ShopPage() {
   const open = useCallback((product: Product) => {
     // depth = product pages opened since the grid, so "Back to results" can jump straight back to it.
     const depth = (window.history.state?.shopDepth ?? 0) + 1;
-    window.history.pushState({ shopDepth: depth }, "", `/shop?product=${encodeURIComponent(product.id)}`);
+    window.history.pushState({ shopDepth: depth }, "", `${shopPath}?product=${encodeURIComponent(product.id)}`);
     setProductId(product.id);
     window.scrollTo({ top: 0 });
-  }, []);
+  }, [shopPath]);
 
   const back = useCallback(() => {
     const depth = window.history.state?.shopDepth;
     if (typeof depth === "number" && depth > 0) {
       window.history.go(-depth);
     } else {
-      window.history.replaceState(null, "", "/shop");
+      window.history.replaceState(null, "", shopPath);
       setProductId(null);
     }
-  }, []);
+  }, [shopPath]);
 
   const search: SearchFetcher = useCallback(async (input) => {
     try {
@@ -75,54 +76,60 @@ function ShopPage() {
 
   const ready = status.data?.search === true;
 
+  const content = (
+    <>
+      {productId ? <ProductView key={productId} productId={productId} onBack={back} onOpen={open} /> : null}
+
+      {/* The grid stays mounted behind the product page, so "Back" lands on the same results. */}
+      <div hidden={productId !== null}>
+        <div className="mb-6">
+          <p className="eyebrow">Shop</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-[-0.045em] text-ink sm:text-[40px] sm:leading-[1.05]">
+            Find it, then <span className="mark">pay with PayPal</span>
+          </h1>
+          <p className="mt-3 max-w-2xl text-ink-soft">
+            Search by words or by photo across Channel3’s catalog. Open a product to pick a size or colour, compare stores and check out in
+            PayPal Sandbox.
+          </p>
+        </div>
+
+        {status.isLoading ? null : !ready ? (
+          <Notice
+            title={status.isError ? "We couldn’t reach the shop" : "Search unavailable"}
+            body={
+              status.isError
+                ? "The server didn’t answer. Refresh to try again."
+                : "Product search isn't configured on this server (CHANNEL3_API_KEY missing)"
+            }
+          />
+        ) : (
+          <>
+            {searchError ? <Notice title="Search didn’t work" body={searchError} /> : null}
+            <ProductSearch
+              fetchSearch={search}
+              searchBrands={searchBrands}
+              searchWebsites={searchWebsites}
+              searchCategories={searchCategories}
+              getCategory={getCategory}
+              filtersLayout="bar"
+              imageSearch
+              placeholder="Search products, paste a store link, or drop in a photo"
+              onSelect={open}
+              locale="en-US"
+            />
+          </>
+        )}
+      </div>
+    </>
+  );
+
+  if (embedded) return content;
+
   return (
     <>
       <Header showNav />
       <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-          {productId ? <ProductView key={productId} productId={productId} onBack={back} onOpen={open} /> : null}
-
-          {/* The grid stays mounted behind the product page, so "Back" lands on the same results. */}
-          <div hidden={productId !== null}>
-            <div className="mb-6">
-              <p className="eyebrow">Shop</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-[-0.045em] text-ink sm:text-[40px] sm:leading-[1.05]">
-                Find it, then <span className="mark">pay with PayPal</span>
-              </h1>
-              <p className="mt-3 max-w-2xl text-ink-soft">
-                Search by words or by photo across Channel3’s catalog. Open a product to pick a size or colour, compare stores and check out in
-                PayPal Sandbox.
-              </p>
-            </div>
-
-            {status.isLoading ? null : !ready ? (
-              <Notice
-                title={status.isError ? "We couldn’t reach the shop" : "Search unavailable"}
-                body={
-                  status.isError
-                    ? "The server didn’t answer. Refresh to try again."
-                    : "Product search isn't configured on this server (CHANNEL3_API_KEY missing)"
-                }
-              />
-            ) : (
-              <>
-                {searchError ? <Notice title="Search didn’t work" body={searchError} /> : null}
-                <ProductSearch
-                  fetchSearch={search}
-                  searchBrands={searchBrands}
-                  searchWebsites={searchWebsites}
-                  searchCategories={searchCategories}
-                  getCategory={getCategory}
-                  filtersLayout="bar"
-                  imageSearch
-                  placeholder="Search products, paste a store link, or drop in a photo"
-                  onSelect={open}
-                  locale="en-US"
-                />
-              </>
-            )}
-          </div>
-        </div>
+        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">{content}</div>
       </main>
       <Footer />
     </>
@@ -141,13 +148,13 @@ function Notice({ title, body }: { title: string; body: string }) {
   );
 }
 
-export function Shop() {
+export function Shop({ embedded = false }: { embedded?: boolean }) {
   const [client] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 } } })
   );
   return (
     <QueryClientProvider client={client}>
-      <ShopPage />
+      <ShopPage embedded={embedded} />
     </QueryClientProvider>
   );
 }

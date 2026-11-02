@@ -22,7 +22,7 @@ function credentials(body: unknown) {
  *   POST /api/auth/signup   { username, password, next? } → { ok, next }
  *   POST /api/auth/login    { username, password, next? } → { ok, next }
  *   POST /api/auth/logout
- *   GET  /api/me            → { user } | 401
+ *   GET  /api/me            → { user } | { user: null }
  *   PUT  /api/me/paypal     { email | null } → link the shopper's sandbox PayPal login
  */
 export function createAuthRouter(db: Database, session: AppSession) {
@@ -111,7 +111,7 @@ export function createAuthRouter(db: Database, session: AppSession) {
             .limit(1)
         : [];
       if (!user) {
-        response.status(401).json({ error: "not_signed_in" });
+        response.json({ user: null });
         return;
       }
       response.json({ user });

@@ -66,7 +66,7 @@ export function AnalyticsStudio() {
         <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
           Analytics fills in from your PayPal orders, refunds, disputes and price watches. Place an order from the shop or Claude to see it here.
         </p>
-        <Link href="/shop" className="mt-5 inline-flex rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink">
+        <Link href="/dashboard/shop" className="mt-5 inline-flex rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink">
           Open the shop
         </Link>
       </Card>

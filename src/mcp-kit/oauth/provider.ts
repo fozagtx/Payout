@@ -37,7 +37,7 @@ import {
 
 const ACCESS_TOKEN_SECONDS = 15 * 60;
 const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
-const AUTHORIZATION_REQUEST_SECONDS = 10 * 60;
+const AUTHORIZATION_REQUEST_SECONDS = 30 * 60;
 const CODE_SECONDS = 5 * 60;
 const CLIENT_METADATA_CACHE_SECONDS = 60 * 60;
 // A connection ends this long after the user approved it, however often it

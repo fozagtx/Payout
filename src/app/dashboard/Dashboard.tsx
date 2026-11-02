@@ -22,8 +22,12 @@ export function Dashboard({ children }: { children: ReactNode }) {
   const { collapsed, toggle } = useCollapsed();
 
   const loadUser = useCallback(async () => {
-    const me = await api<{ user: User }>("/api/me");
+    const me = await api<{ user: User | null }>("/api/me");
     if (me.ok) {
+      if (!me.data.user) {
+        window.location.assign(`/login?next=${encodeURIComponent(pathname)}`);
+        return;
+      }
       setUser(me.data.user);
       return;
     }

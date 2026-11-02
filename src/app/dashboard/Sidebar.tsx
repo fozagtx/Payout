@@ -12,7 +12,7 @@ const STORAGE_KEY = "payout:sidebar-collapsed";
 
 export const sections: { href: string; label: string; icon: ComponentType<IconProps> }[] = [
   { href: "/dashboard", label: "Connect Claude", icon: HomeIcon },
-  { href: "/shop", label: "Shop", icon: Store },
+  { href: "/dashboard/shop", label: "Shop", icon: Store },
   { href: "/dashboard/orders", label: "Orders", icon: BagIcon },
   { href: "/dashboard/alerts", label: "Price alerts", icon: Bell },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },

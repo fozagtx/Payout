@@ -70,6 +70,7 @@ export function page(branding: Branding, title: string, body: string) {
   button { flex:1; padding:12px 14px; border-radius:14px; border:1px solid var(--accent);
            font:inherit; font-weight:600; cursor:pointer; background:var(--accent); color:#fff; }
   button.secondary { background:transparent; color:var(--ink); border-color:var(--line); }
+  .link { color:var(--accent); font-weight:600; text-decoration:underline; text-underline-offset:3px; }
 </style>
 </head>
 <body><main class="card">

@@ -8,7 +8,7 @@ export type MeState = { status: "loading" } | { status: "signed-in"; user: User 
 // One request per page load, shared by every component that asks.
 let pending: Promise<MeState> | null = null;
 function fetchMe(): Promise<MeState> {
-  pending ??= api<{ user: User }>("/api/me").then((result): MeState =>
+  pending ??= api<{ user: User | null }>("/api/me").then((result): MeState =>
     result.ok && result.data?.user ? { status: "signed-in", user: result.data.user } : { status: "signed-out" },
   );
   return pending;

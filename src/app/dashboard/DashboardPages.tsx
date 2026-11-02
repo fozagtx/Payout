@@ -54,9 +54,14 @@ export function DashboardPayPalPage() {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     void (async () => {
-      const result = await api<{ user: User }>("/api/me");
-      if (result.ok) setUser(result.data.user);
-      else setError(result.message);
+      const result = await api<{ user: User | null }>("/api/me");
+      if (result.ok && result.data.user) {
+        setUser(result.data.user);
+      } else if (result.ok || result.status === 401) {
+        window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+      } else {
+        setError(result.message);
+      }
     })();
   }, []);
 
