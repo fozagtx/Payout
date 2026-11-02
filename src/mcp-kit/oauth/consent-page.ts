@@ -36,14 +36,35 @@ export function renderConsentPage(input: {
      <ul>${scopes}</ul>
      <p class="note">${origin} After you allow, you'll be sent to
        <strong>${escapeHtml(input.pending.redirectHost)}</strong>. Only continue if that's the AI app you're using.</p>
-     <div class="row">${button("deny", "Cancel", "secondary")}${button("allow", "Allow")}</div>`
+     <div class="row">${button("deny", "Cancel", "secondary")}${button("allow", "Allow")}</div>
+     <script>
+       const consentForms = Array.from(document.querySelectorAll('form[action="/oauth/consent"]'));
+       consentForms.forEach((form) => {
+         form.addEventListener("submit", (event) => {
+           consentForms.forEach((consentForm) => {
+             consentForm.querySelectorAll("button").forEach((button) => {
+               button.disabled = true;
+             });
+             if (consentForm !== event.currentTarget) {
+               consentForm.setAttribute("aria-disabled", "true");
+               consentForm.inert = true;
+             }
+           });
+           const button = event.submitter;
+           const decision = button?.form?.querySelector('input[name="decision"]')?.value;
+           if (button) button.textContent = decision === "allow" ? "Connecting…" : "Cancelling…";
+         });
+       });
+     </script>`
   );
 }
 
 export function renderExpiredPage(branding: Branding) {
   return page(
     branding,
-    "Link expired",
-    `<h1>This link has expired</h1><p>Start the connection again from your AI app.</p>`
+    "Connection link is no longer valid",
+    `<h1>This connection link is no longer valid</h1>
+     <p>It was already used or it expired. Go back to Claude or ChatGPT and click Connect again.</p>
+     <a class="link" href="/dashboard/apps">Open Payout</a>`
   );
 }

@@ -16,6 +16,9 @@ const pkce = () => {
 // ── Discovery ────────────────────────────────────────────────────────────────
 let r = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
 ok(r.status === 401 && /resource_metadata=/.test(r.headers.get("www-authenticate") ?? ""), "401 + WWW-Authenticate resource_metadata");
+const signedOutMe = await fetch(`${base}/api/me`);
+const signedOutMeBody = await signedOutMe.json();
+ok(signedOutMe.status === 200 && signedOutMeBody.user === null, "signed-out /api/me returns a nullable user");
 const prm = await (await fetch(`${base}/.well-known/oauth-protected-resource/mcp`)).json();
 ok(prm.resource === `${base}/mcp`, "protected resource metadata (RFC 9728 path)");
 const rootPrm = await (await fetch(`${base}/.well-known/oauth-protected-resource`)).json();
@@ -69,11 +72,16 @@ ok(r.status === 201 && dcr.client_id, "DCR: client registered");
 
 let a = await authorize({ clientId: dcr.client_id, redirectUri: claudeRedirect });
 ok(a.html.includes("Connect Claude") && a.html.includes("Search products and show them to you"), "consent page shows client + scopes");
+ok(a.html.includes("button.disabled = true") && a.html.includes("Connecting…") && a.html.includes("Cancelling…"), "consent form prevents duplicate submissions");
 ok(a.html.includes("isn't verified") && a.html.includes("claude.ai"), "consent page: DCR name marked unverified, shows redirect host");
 ok(a.page.headers.get("x-frame-options") === "DENY" && /frame-ancestors 'none'/.test(a.page.headers.get("content-security-policy")), "consent page refuses framing");
 ok(a.html.includes('rel="icon" href="/favicon.ico"'), "consent page links favicon");
 const bad = await fetch(`${base}/oauth/consent`, { ...form({ requestId: a.connectUrl.searchParams.get("requestId"), csrf: "x".repeat(a.csrf.length), decision: "allow" }), headers: { cookie, "content-type": "application/x-www-form-urlencoded" } });
-ok(bad.status === 403 || bad.status === 400, "bad CSRF rejected");
+const badHtml = await bad.text();
+ok(bad.status === 400 && bad.headers.get("content-type")?.includes("text/html") && badHtml.includes("Connect again"), "bad CSRF returns HTML recovery page");
+const reused = await fetch(`${base}/oauth/consent`, { ...form({ requestId: a.connectUrl.searchParams.get("requestId"), csrf: a.csrf, decision: "allow" }), headers: { cookie, "content-type": "application/x-www-form-urlencoded" } });
+const reusedHtml = await reused.text();
+ok(reused.status === 400 && reused.headers.get("content-type")?.includes("text/html") && reusedHtml.includes("Connect again"), "reused consent POST returns HTML recovery page");
 ok(a.location.origin + a.location.pathname === claudeRedirect && a.location.searchParams.get("state") === "xyz", "redirect back with code + state");
 ok(a.location.searchParams.get("iss") === asm.issuer, "redirect carries iss (RFC 9207)");
 

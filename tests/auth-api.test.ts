@@ -73,8 +73,10 @@ describe("username + password auth", () => {
     expect((await evil.json()).next).toBe("/");
   });
 
-  it("/api/me needs a session and returns the user without the password hash", async () => {
-    expect((await fetch(`${server.baseUrl}/api/me`)).status).toBe(401);
+  it("/api/me returns a nullable user without requiring a session", async () => {
+    const signedOut = await fetch(`${server.baseUrl}/api/me`);
+    expect(signedOut.status).toBe(200);
+    expect(await signedOut.json()).toEqual({ user: null });
     const { cookie } = await signUp(server.baseUrl, "dana");
     const me = await (await fetch(`${server.baseUrl}/api/me`, { headers: { cookie } })).json();
     expect(me.user.username).toBe("dana");

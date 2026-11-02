@@ -50,7 +50,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
             </div>
             <CopyButton text={url} label="Copy URL" className="sm:w-36" />
           </div>
-          <p className="mt-3 text-sm"><a className="text-brand underline" href="/shop">No paid Claude plan? Shop on the web instead →</a></p>
+          <p className="mt-3 text-sm"><a className="text-brand underline" href="/dashboard/shop">No paid Claude plan? Shop on the web instead →</a></p>
         </div>
 
         <div>
