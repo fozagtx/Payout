@@ -1,13 +1,14 @@
 import type { Config } from "../config.js";
-import { createChannel3Catalog } from "./channel3/client.js";
+import type { Database } from "../db/client.js";
 import { createStorefront } from "./channel3/storefront.js";
 import { createPayPalPayments } from "./paypal/client.js";
+import { createStoreCatalog } from "./store/catalog.js";
 import type { Services } from "./services.js";
 
-/** The real Channel3 + PayPal sandbox services, from env config. */
-export function createLiveServices(config: Config): Services {
+/** The real store catalog + Channel3 + PayPal sandbox services, from env config. */
+export function createLiveServices(config: Config, db: Database): Services {
   return {
-    catalog: createChannel3Catalog({ apiKey: config.channel3ApiKey }),
+    catalog: createStoreCatalog(db),
     ...(config.channel3ApiKey ? { storefront: createStorefront(config.channel3ApiKey) } : {}),
     payments: createPayPalPayments({
       clientId: config.paypal.clientId,

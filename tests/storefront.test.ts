@@ -6,7 +6,7 @@ import { createCookieSession } from "../src/project/session.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Product } from "@channel3/sdk/resources";
 import { Channel3ProductProcessingError, createStorefront } from "../src/project/channel3/storefront.js";
-import { orders } from "../src/project/schema.js";
+import { orders, products } from "../src/project/schema.js";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
 import type { Catalog, Product as CatalogProduct, SelectedOptions } from "../src/project/services.js";
 import { signUp, startServer, type TestServer } from "./helpers/harness.js";
@@ -76,9 +76,21 @@ const paypal = fakePayments();
 let server: TestServer;
 let cookie: string;
 
+let rowP1: typeof products.$inferSelect;
+let rowP2: typeof products.$inferSelect;
+
 beforeAll(async () => {
   server = await startServer({ storefront: fake.storefront, catalog, payments: paypal.payments });
   cookie = (await signUp(server.baseUrl, "shopper")).cookie;
+  [rowP1] = await server.db.insert(products).values({
+    title: "Trail Runner Shoe", brand: "nike", description: "A trail shoe",
+    priceCents: 4200, currency: "USD", inStock: true,
+    channel3Id: "p1", supplierName: "shop.example", supplierUrl: "https://shop.example/p1", supplierCents: 3900,
+    options: [{ name: "Color", values: ["Navy", "Red"] }, { name: "Size", values: ["10", "11"] }],
+  }).returning();
+  [rowP2] = await server.db.insert(products).values({
+    title: "Court Runner Shoe", brand: "nike", priceCents: 1500, currency: "USD", inStock: true, channel3Id: "p2",
+  }).returning();
 });
 afterAll(() => server.close());
 afterEach(() => vi.restoreAllMocks());
@@ -129,11 +141,11 @@ describe("storefront without CHANNEL3_API_KEY", () => {
     await new Promise((resolve) => http.once("listening", resolve));
     const base = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;
     try {
-      expect(await (await fetch(`${base}/api/shop/status`)).json()).toEqual({ search: false });
+      expect(await (await fetch(`${base}/api/shop/status`)).json()).toMatchObject({ search: true, imageSearch: false });
       const response = await fetch(`${base}/api/shop/search`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: "shoes" }),
+        body: JSON.stringify({ base64Image: "AAA" }),
       });
       expect(response.status).toBe(503);
       expect((await response.json()).error).toBe("search_not_configured");
@@ -144,51 +156,59 @@ describe("storefront without CHANNEL3_API_KEY", () => {
 });
 
 describe("POST /api/shop/search", () => {
-  it("passes text, image, filters and page token through and returns the next page token", async () => {
-    const response = await post("/api/shop/search", {
-      query: "trail shoes",
-      imageUrl: "https://img.example/shoe.jpg",
-      filters: { price: { max_price: 100 } },
-      pageToken: "tok",
-    });
+  it("searches the store catalog by text and honours the price filter", async () => {
+    const response = await post("/api/shop/search", { query: "trail", filters: { price: { max_price: 100 } } });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.products.map((p: Product) => p.id)).toEqual(["p1", "p2"]);
-    expect(body.products[0].offers[0].url).toBe("https://go.trychannel3.com/p1");
+    expect(body.products.map((p: Product) => p.id)).toEqual([rowP1!.id]);
+    expect(body.products[0].offers[0].domain).toBe("this store");
     expect(body.nextPageToken).toBeNull();
-    expect(fake.searches.at(-1)).toMatchObject({
-      query: "trail shoes",
-      imageUrl: "https://img.example/shoe.jpg",
-      filters: { price: { max_price: 100 } },
-      pageToken: "tok",
-    });
+    // A text search never touches Channel3.
+    expect(fake.searches.find((s) => s.query === "trail")).toBeUndefined();
   });
 
-  it("accepts a base64 photo larger than the 16kb auth body limit", async () => {
+  it("maps photo-search hits to the products this store sells", async () => {
     const base64Image = "A".repeat(200_000);
     const response = await post("/api/shop/search", { base64Image });
     expect(response.status).toBe(200);
     expect(fake.searches.at(-1)!.base64Image).toHaveLength(200_000);
+    const body = await response.json();
+    expect(body.products.map((p: Product) => p.id).sort()).toEqual([rowP1!.id, rowP2!.id].sort());
   });
 
-  it("attributes searches to the signed-in user", async () => {
-    await post("/api/shop/search", { query: "socks" }, { cookie });
+  it("attributes photo searches to the signed-in user", async () => {
+    await post("/api/shop/search", { base64Image: "AAA" }, { cookie });
     expect(fake.searches.at(-1)!.userId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it("rejects a search with nothing to search for", async () => {
+  it("lists everything in stock for an empty query", async () => {
     const response = await post("/api/shop/search", { query: "  " });
-    expect(response.status).toBe(400);
-    expect((await response.json()).error).toBe("invalid_request");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.products.map((p: Product) => p.id).sort()).toEqual([rowP1!.id, rowP2!.id].sort());
   });
 });
 
 describe("POST /api/shop/lookup", () => {
-  it("returns a product from the requested link and attributes it to the signed-in user", async () => {
+  it("returns a research-only product for a link the store doesn't sell, attributed to the signed-in user", async () => {
     const response = await post("/api/shop/lookup", { url: "https://shop.example/product" }, { cookie });
     expect(response.status).toBe(200);
-    expect((await response.json()).product.id).toBe("lookup-result");
+    const body = await response.json();
+    expect(body.product.id).toBe("lookup-result");
+    expect(body.product.research_only).toBe(true);
     expect(fake.lookups.at(-1)).toMatchObject({ url: "https://shop.example/product", userId: expect.any(String) });
+  });
+
+  it("returns the store's own row when the link is a product it sells", async () => {
+    const original = fake.storefront.lookup.bind(fake.storefront);
+    fake.storefront.lookup = async (url, userId) => {
+      const product = await original(url, userId);
+      return product ? { ...product, id: "p1" } : product;
+    };
+    const response = await post("/api/shop/lookup", { url: "https://shop.example/product" });
+    fake.storefront.lookup = original;
+    expect(response.status).toBe(200);
+    expect((await response.json()).product.id).toBe(rowP1!.id);
   });
 
   it("returns 404 for unknown links and rejects non-http URLs", async () => {
@@ -198,9 +218,9 @@ describe("POST /api/shop/lookup", () => {
 });
 
 describe("product pages", () => {
-  it("returns the full product with its price history", async () => {
-    const body = await (await fetch(`${server.baseUrl}/api/shop/products/p1`)).json();
-    expect(body.product.id).toBe("p1");
+  it("returns the store product with its price history", async () => {
+    const body = await (await fetch(`${server.baseUrl}/api/shop/products/${rowP1!.id}`)).json();
+    expect(body.product.id).toBe(rowP1!.id);
     expect(body.priceHistory.canonical_product_id).toBe("p1");
     expect(body.priceHistory.history[0].timestamp).toBe("2026-10-01T00:00:00.000Z");
   });
@@ -209,19 +229,21 @@ describe("product pages", () => {
     expect((await fetch(`${server.baseUrl}/api/shop/products/missing`)).status).toBe(404);
   });
 
-  it("re-fetches the product for a variant selection", async () => {
-    const response = await post("/api/shop/products/p1/resolve", { selection: { Color: "Navy", Size: "10" } });
-    expect((await response.json()).product.title).toBe("Product p1 Navy/10");
-    expect(fake.resolves.at(-1)).toEqual({ id: "p1", selection: { Color: "Navy", Size: "10" } });
+  it("returns the product with the chosen variant, and 404s an option we don't have", async () => {
+    const response = await post(`/api/shop/products/${rowP1!.id}/resolve`, { selection: { Color: "Navy", Size: "10" } });
+    const product = (await response.json()).product;
+    expect(product.id).toBe(rowP1!.id);
+    expect(product.variants.selected).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Color", label: "Navy" })]));
+    expect((await post(`/api/shop/products/${rowP1!.id}/resolve`, { selection: { Color: "Green" } })).status).toBe(404);
   });
 
-  it("returns similar products", async () => {
-    const body = await (await post("/api/shop/similar", { productId: "p1", limit: 4 })).json();
-    expect(body.products.map((p: Product) => p.id)).toEqual(["p1-like"]);
+  it("returns similar products from the store catalog", async () => {
+    const body = await (await post("/api/shop/similar", { productId: rowP1!.id, limit: 4 })).json();
+    expect(body.products.map((p: Product) => p.id)).toEqual([rowP2!.id]);
   });
 
   it("looks up brands for the filter bar", async () => {
-    expect(await (await fetch(`${server.baseUrl}/api/shop/brands?q=nike`)).json()).toEqual({ brands: [{ id: "b1", name: "nike" }] });
+    expect(await (await fetch(`${server.baseUrl}/api/shop/brands?q=nike`)).json()).toEqual({ brands: [{ id: "nike", name: "nike" }] });
   });
 });
 

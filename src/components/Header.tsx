@@ -31,8 +31,6 @@ function AutoActions() {
 const nav = [
   { href: "/shop", label: "Shop" },
   { href: "/#how-it-works", label: "How it works" },
-  { href: "/#checkout", label: "Checkout" },
-  { href: "/#built-with", label: "Built with" },
 ];
 
 /** Shared top bar. Pass `actions` to replace the default sign-in-aware buttons; `nav` shows the landing links. */
@@ -63,7 +61,7 @@ export function Footer() {
     <footer className="border-t border-line py-8 text-sm text-muted-foreground">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 sm:flex-row sm:px-6">
         <p>Payout · built for the PayPal AI Hackathon</p>
-        <p className="font-mono text-[11px] tracking-wide uppercase">PayPal Sandbox · no real money moves</p>
+        <p className="font-mono text-[11px] tracking-wide uppercase">PayPal · test mode — no real money</p>
       </div>
     </footer>
   );

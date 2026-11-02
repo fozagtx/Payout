@@ -1,12 +1,13 @@
 import express, { Router } from "express";
 import { Webhook } from "svix";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../../db/client.js";
 import { isInStock } from "../../lib/format.js";
 import { Channel3ProductProcessingError } from "../channel3/storefront.js";
 import { requireMerchant } from "../admin.js";
-import { priceWatches, webhookEvents } from "../schema.js";
+import { orders, priceWatches, webhookEvents } from "../schema.js";
+import { getStoreProduct } from "../store/catalog.js";
 import type { Services } from "../services.js";
 import type { AppSession } from "../session.js";
 
@@ -196,7 +197,16 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
         response.status(503).json({ error: "search_not_configured", message: "Product watches need CHANNEL3_API_KEY on this server." });
         return;
       }
-      const { productId, targetPrice } = parsed.data;
+      // The shop sends the store's product id; price watches key on the Channel3 id it was imported from.
+      let { productId, targetPrice } = parsed.data;
+      const row = await getStoreProduct(db, productId);
+      if (row) {
+        if (!row.channel3Id) {
+          response.status(409).json({ error: "watch_not_available", message: "Price watching isn't available for this product — the merchant sets the price." });
+          return;
+        }
+        productId = row.channel3Id;
+      }
       const [existing] = await db
         .select()
         .from(priceWatches)
@@ -304,12 +314,26 @@ export function createWatchesRouter(db: Database, session: AppSession, services:
         response.status(400).json({ error: "invalid_request", message: "days must be a whole number from 1 to 90." });
         return;
       }
-      if (!services.storefront) {
-        response.status(503).json({ error: "search_not_configured", message: "Earnings reporting needs CHANNEL3_API_KEY on this server." });
-        return;
-      }
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      const rows = await db
+        .select({ status: orders.status, totalCents: orders.totalCents, currency: orders.currency, refunds: orders.refunds })
+        .from(orders)
+        .where(sql`${orders.createdAt} >= ${since}`);
+      const paid = rows.filter((row) => ["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(row.status));
+      const grossCents = paid.reduce((sum, row) => sum + row.totalCents, 0);
+      const refundedCents = paid.reduce((sum, row) => sum + (row.refunds ?? []).reduce((s, refund) => s + refund.cents, 0), 0);
+      const revenue = {
+        orders: paid.length,
+        currency: paid[0]?.currency ?? "USD",
+        grossCents,
+        refundedCents,
+        netCents: grossCents - refundedCents,
+      };
+      const channel3 = services.storefront
+        ? await services.storefront.earnings(undefined, days).catch(() => null)
+        : null;
       response.setHeader("cache-control", "no-store");
-      response.json(await services.storefront.earnings(undefined, days));
+      response.json({ revenue, channel3 });
     } catch (error) {
       next(error);
     }

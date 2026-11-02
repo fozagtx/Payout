@@ -90,8 +90,8 @@ function ShopPage() {
                 Find it, then <span className="mark">pay with PayPal</span>
               </h1>
               <p className="mt-3 max-w-2xl text-ink-soft">
-                Search by words or by photo across Channel3’s catalog. Open a product to pick a size or colour, compare stores and check out in
-                PayPal Sandbox.
+                Everything the store sells, searchable by words or photo. Open a product to pick a size or colour and pay with PayPal — the
+                merchant ships your order.
               </p>
             </div>
 
@@ -115,6 +115,7 @@ function ShopPage() {
                   getCategory={getCategory}
                   filtersLayout="bar"
                   imageSearch
+                  searchOnMount
                   placeholder="Search products, paste a store link, or drop in a photo"
                   onSelect={open}
                   locale="en-US"

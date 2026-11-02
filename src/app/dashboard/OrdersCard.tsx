@@ -33,12 +33,13 @@ export function OrdersCard() {
   const [refundOrder, setRefundOrder] = useState<Order | null>(null);
   const [refundMode, setRefundMode] = useState<"request" | "merchant">("request");
   const [refundSuccess, setRefundSuccess] = useState<Record<string, string>>({});
-  const [checkingDisputes, setCheckingDisputes] = useState(false);
   const [disputesError, setDisputesError] = useState<string | null>(null);
-  const [disputesResult, setDisputesResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
+    // Sync disputes first so anything open shows on the order itself.
+    const disputes = await api<{ disputes: unknown[] }>("/api/disputes");
+    setDisputesError(disputes.ok ? null : disputes.message);
     const result = await api<{ orders: Order[] }>("/api/orders");
     if (result.ok || result.status === 404) {
       const orders = result.ok ? result.data?.orders ?? [] : [];
@@ -54,21 +55,6 @@ export function OrdersCard() {
     }
   }, []);
 
-  async function checkDisputes() {
-    setCheckingDisputes(true);
-    setDisputesError(null);
-    setDisputesResult(null);
-    const result = await api<{ disputes: unknown[] }>("/api/disputes");
-    setCheckingDisputes(false);
-    if (!result.ok) {
-      setDisputesError(result.message);
-      return;
-    }
-    await load();
-    const count = result.data.disputes.length;
-    setDisputesResult(count === 0 ? "No disputes on your orders." : `${count} ${count === 1 ? "dispute" : "disputes"} found — shown on the order.`);
-  }
-
   useEffect(() => {
     void load();
   }, [load]);
@@ -79,18 +65,14 @@ export function OrdersCard() {
       <CardHeader
         icon={<BagIcon />}
         title="Orders"
-        description="Everything you’ve bought through Claude."
+        description="Everything you’ve bought in this store."
         action={<div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => void checkDisputes()} disabled={checkingDisputes}>
-            Check disputes
-          </Button>
           <Button variant="ghost" size="sm" onClick={() => void load()} disabled={state.status === "loading"}>
             Refresh
           </Button>
         </div>}
       />
       {disputesError ? <p className="px-5 pt-3 text-xs text-red-700 sm:px-6" role="alert">{disputesError}</p> : null}
-      {disputesResult ? <p className="px-5 pt-3 text-xs text-ink-soft sm:px-6" role="status">{disputesResult}</p> : null}
       <div>
         {state.status === "loading" ? (
           <div className="space-y-3 px-5 py-5 sm:px-6" aria-hidden="true">
@@ -172,7 +154,7 @@ export function OrdersCard() {
                   ) : null}
                   {pendingRequest ? (
                     <div className="mt-2 flex items-center justify-between gap-3 text-xs text-amber-800">
-                      <span>Refund requested · {formatMoney(pendingRequest.amountCents, order.currency)} · waiting for the store</span>
+                      <span>Refund requested · {formatMoney(pendingRequest.amountCents, order.currency)} · waiting for the merchant</span>
                       <Button variant="ghost" size="sm" onClick={async () => {
                         const result = await api<{ order: Order }>(`/api/orders/${order.id}/refund-request`, { method: "DELETE" });
                         if (result.ok) {

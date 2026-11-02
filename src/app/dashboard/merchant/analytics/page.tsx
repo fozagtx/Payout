@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Analytics" };
 export default function Page() {
   return (
     <section>
-      <PageHeading title="Analytics" description="Revenue, refunds, disputes and commission from your real orders, built with AG Studio." />
+      <PageHeading title="Analytics" description="Revenue, refunds, disputes and commission from your real orders." />
       <AnalyticsStudio />
     </section>
   );
