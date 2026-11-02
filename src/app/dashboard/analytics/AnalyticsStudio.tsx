@@ -56,7 +56,7 @@ export function AnalyticsStudio() {
   }
 
   const { data } = state;
-  if (data.orders.length === 0 && data.watches.length === 0 && data.earnings.transactions.length === 0) {
+  if (data.orders.length === 0 && data.watches.length === 0) {
     return (
       <Card className="px-6 py-12 text-center">
         <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-tan text-ink">
@@ -64,7 +64,7 @@ export function AnalyticsStudio() {
         </span>
         <h2 className="mt-4 text-base font-semibold text-ink-900">No data to chart yet</h2>
         <p className="mx-auto mt-1 max-w-md text-sm text-ink-soft">
-          Analytics fills in from your real PayPal orders, refunds, disputes, price watches and Channel3 commission. Place an order from the shop or Claude to see it here.
+          Analytics fills in from your PayPal orders, refunds, disputes and price watches. Place an order from the shop or Claude to see it here.
         </p>
         <Link href="/shop" className="mt-5 inline-flex rounded-full bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink">
           Open the shop
@@ -75,9 +75,6 @@ export function AnalyticsStudio() {
 
   return (
     <div className="space-y-3">
-      {!data.earnings.available && data.earnings.message ? (
-        <p className="rounded-xl border border-line bg-paper px-4 py-2.5 text-sm text-ink-soft">Commission widgets are empty: {data.earnings.message}</p>
-      ) : null}
       <StudioView data={data} />
     </div>
   );

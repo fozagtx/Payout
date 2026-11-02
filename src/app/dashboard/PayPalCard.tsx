@@ -7,8 +7,6 @@ import { Card, CardBody, CardHeader } from "@/components/Card.js";
 import { CheckIcon, PayPalMark } from "@/components/Icons.js";
 import { Pill } from "@/components/StatusPill.js";
 
-const PAYPAL_MCP = "https://mcp.sandbox.paypal.com/http";
-
 export function PayPalCard({ user, onChange }: { user: User; onChange: (email: string | null) => void }) {
   const id = useId();
   const [editing, setEditing] = useState(!user.paypalEmail);
@@ -48,20 +46,18 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
       <CardHeader
         icon={<PayPalMark className="h-5 w-5" />}
         title="PayPal"
-        description="Checkout runs in PayPal test mode — no real money moves."
+        description="Checkout runs on PayPal Sandbox."
         action={user.paypalEmail ? <Pill tone="green">Linked</Pill> : <Pill tone="slate">Optional</Pill>}
       />
       <CardBody className="space-y-4">
         <p className="text-sm leading-relaxed text-ink-soft">
-          When you check out in Claude, you approve the payment on PayPal itself. Link your PayPal{" "}
-          <strong className="font-semibold text-ink">sandbox buyer</strong> email to pre-fill the PayPal
-          login.
+          When you check out, you approve the payment on PayPal itself. This email pre-fills the PayPal login.
         </p>
 
         {!editing && user.paypalEmail ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-cream px-4 py-3">
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Linked sandbox account</p>
+              <p className="text-xs text-muted-foreground">PayPal email (test mode)</p>
               <p className="truncate text-sm font-semibold text-ink">{user.paypalEmail}</p>
             </div>
             <div className="flex gap-2">
@@ -76,14 +72,14 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
         ) : (
           <form onSubmit={onSubmit} noValidate className="space-y-2">
             <label htmlFor={`${id}-email`} className="block text-sm font-medium text-ink-soft">
-              PayPal test buyer email
+              PayPal email (test mode)
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 id={`${id}-email`}
                 type="email"
                 autoComplete="email"
-                placeholder="sb-buyer@personal.example.com"
+                placeholder="name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 aria-invalid={Boolean(error)}
@@ -105,6 +101,7 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
                 </Button>
               ) : null}
             </div>
+            <p className="text-xs text-muted-foreground">Only prefills the PayPal login at checkout.</p>
           </form>
         )}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -114,13 +111,6 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
           </p>
         ) : null}
 
-        <div className="rounded-xl bg-cream px-4 py-3 text-xs leading-relaxed text-ink-soft">
-          <strong className="font-semibold text-ink">Tip:</strong> add PayPal’s own MCP server in Claude too,
-          for invoices and refunds:{" "}
-          <code className="break-all rounded bg-paper px-1 py-0.5 font-mono text-[11px] text-ink">
-            {PAYPAL_MCP}
-          </code>
-        </div>
       </CardBody>
     </Card>
   );

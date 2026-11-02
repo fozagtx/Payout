@@ -1,10 +1,8 @@
 import type { Catalog, Product, SearchOptions, SelectedOptions } from "../services.js";
-import { createDemoCatalog } from "./demo-catalog.js";
 
 /**
  * Channel3 product search (https://trychannel3.com), with plain fetch.
- * Without an API key it falls back to a built-in demo catalog so the app
- * runs end to end for anyone trying it.
+ * Catalog searches require a configured Channel3 API key.
  */
 
 const DEFAULT_BASE_URL = "https://api.trychannel3.com";
@@ -66,7 +64,12 @@ export function normaliseProduct(raw: RawProduct): Product | undefined {
 }
 
 export function createChannel3Catalog(options: Channel3Options = {}): Catalog {
-  if (!options.apiKey) return createDemoCatalog();
+  if (!options.apiKey) {
+    const unavailable = async (): Promise<never> => {
+      throw new Error("Product search isn't configured on this server (CHANNEL3_API_KEY missing)");
+    };
+    return { search: unavailable, get: async () => undefined };
+  }
   const apiKey = options.apiKey;
   const doFetch = options.fetch ?? fetch;
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");

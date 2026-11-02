@@ -413,6 +413,7 @@ function productsView() {
         { type: "button", class: "paypal", disabled: !count || state.busy, onclick: checkout, "aria-label": "Pay with PayPal" },
         state.busy ? [el("span", { class: "spinner", "aria-hidden": "true" }), "Starting checkout…"] : paypalLabel("Pay with")
       ),
+      el("p", { class: "sandbox", text: "Test mode: no real money is charged and no item is shipped." }),
     ])
   );
   return nodes;
@@ -477,7 +478,7 @@ function orderView() {
       el(
         "button",
         { type: "button", class: "secondary", onclick: checkStatus, disabled: state.busy },
-        state.busy ? [el("span", { class: "spinner", "aria-hidden": "true" }), " Checking…"] : info.key === "approved" ? "Complete payment" : "I’ve paid — check status"
+        state.busy ? [el("span", { class: "spinner", "aria-hidden": "true" }), " Checking…"] : info.key === "approved" ? "Complete payment" : "I’ve paid. Check status"
       )
     );
     if (state.products.length) {

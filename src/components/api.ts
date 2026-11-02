@@ -1,6 +1,6 @@
-import type { RefundEntry, RefundRequest } from "../project/refund-types.js";
+import type { RefundEntry } from "../project/refund-types.js";
 
-export type User = { id: string; username: string; role: "merchant" | "buyer"; paypalEmail: string | null; createdAt: string };
+export type User = { id: string; username: string; paypalEmail: string | null; createdAt: string };
 
 export type Connection = {
   id: string;
@@ -28,22 +28,10 @@ export type Order = {
   totalCents: number;
   refundedCents?: number;
   refunds?: RefundEntry[];
-  refundRequest?: RefundRequest | null;
   currency: string;
   items: OrderItem[];
   dispute?: { id: string; status: string | null; reason: string | null } | null;
-  shipping?: ShippingAddress | null;
   createdAt?: string;
-};
-
-export type ShippingAddress = {
-  name?: string;
-  line1?: string;
-  line2?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-  countryCode?: string;
 };
 
 export type ApiResult<T> = { ok: true; status: number; data: T } | { ok: false; status: number; message: string; error?: string };

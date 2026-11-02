@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { createChannel3Catalog } from "../src/project/channel3/client.js";
-import { DEMO_PRODUCTS } from "../src/project/channel3/demo-catalog.js";
 
 const API_KEY = "sk_test_secret_key_123";
 
@@ -165,36 +164,13 @@ describe("Channel3 catalog", () => {
   });
 });
 
-describe("demo catalog (no API key)", () => {
+describe("Channel3 catalog without an API key", () => {
   const catalog = createChannel3Catalog({ fetch: vi.fn() as unknown as typeof fetch });
 
-  it("has realistic demo products", () => {
-    expect(DEMO_PRODUCTS.length).toBeGreaterThanOrEqual(10);
-    for (const product of DEMO_PRODUCTS) {
-      expect(product.id).toMatch(/^demo_/);
-      expect(product.currency).toBe("USD");
-      expect(product.imageUrl).toMatch(/^https:\/\/images\.unsplash\.com\/photo-/);
-      expect(Number.isInteger(product.priceCents)).toBe(true);
-    }
-    expect(new Set(DEMO_PRODUCTS.map((p) => p.id)).size).toBe(DEMO_PRODUCTS.length);
-  });
-
-  it("matches keywords case-insensitively and applies price and limit", async () => {
-    const headphones = await catalog.search("HEADPHONES");
-    expect(headphones.length).toBeGreaterThan(0);
-    expect(headphones.every((p) => /headphone/i.test(`${p.title} ${p.brand} ${p.description}`))).toBe(true);
-
-    const cheap = await catalog.search("", { maxPriceCents: 5_000 });
-    expect(cheap.length).toBeGreaterThan(0);
-    expect(cheap.every((p) => p.priceCents <= 5_000)).toBe(true);
-
-    expect((await catalog.search("", { limit: 3 })).length).toBe(3);
-    expect(await catalog.search("zzzz-no-such-thing")).toEqual([]);
-  });
-
-  it("gets demo products by id", async () => {
-    const first = DEMO_PRODUCTS[0]!;
-    expect(await catalog.get(first.id)).toEqual(first);
-    expect(await catalog.get("demo_nope")).toBeUndefined();
+  it("reports the missing API key instead of using mock products", async () => {
+    await expect(catalog.search("shoes")).rejects.toThrow(
+      "Product search isn't configured on this server (CHANNEL3_API_KEY missing)"
+    );
+    expect(await catalog.get("missing")).toBeUndefined();
   });
 });

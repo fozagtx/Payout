@@ -22,7 +22,7 @@ const PRODUCT_SUBSCRIPTIONS_URL = "https://api.trychannel3.com/v1/product-subscr
 
 export class Channel3ProductProcessingError extends Error {
   constructor() {
-    super("Channel3 is still processing this product — try again in a minute");
+    super("Channel3 is still processing this product. Try again in a minute.");
     this.name = "Channel3ProductProcessingError";
   }
 }
@@ -50,12 +50,6 @@ export interface Storefront {
   lookup(url: string, userId?: string): Promise<Product | undefined>;
   subscribe(productId: string): Promise<string>;
   unsubscribe(subscriptionId: string): Promise<void>;
-  earnings(userId?: string, days?: number): Promise<{
-    clicks: number;
-    sales: number;
-    transactions: { date: string; merchant: string; saleAmount: number; commission: number; currency: string; status: string }[];
-    totals: { sales: number; commission: number; currency: string };
-  }>;
 }
 
 const notFound = (error: unknown) => error instanceof Channel3Error && error.statusCode === 404;
@@ -130,44 +124,6 @@ export function createStorefront(apiKey: string, client = new Channel3({ apiKey,
       if (response.status !== 404 && !response.ok) {
         throw new Error(`Channel3 product unsubscription failed with status ${response.status}`);
       }
-    },
-    async earnings(userId, days = 30) {
-      const windowDays = Math.min(90, Math.max(1, Math.floor(days)));
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - windowDays * 24 * 60 * 60 * 1000);
-      const filters = { start_date: startDate, end_date: endDate, ...(userId ? { user_id: userId } : {}) };
-      const [clicksPage, transactionsPage] = await Promise.all([
-        client.reporting.listClicks({ ...filters, limit: 100 }),
-        client.reporting.listTransactions({ ...filters, limit: 100 }),
-      ]);
-      const transactions = transactionsPage.data.map((transaction) => {
-        const extra = transaction as typeof transaction & { currency?: string; merchant?: string; website?: string };
-        return {
-          date: transaction.purchased_at instanceof Date
-            ? transaction.purchased_at.toISOString()
-            : new Date(String(transaction.purchased_at)).toISOString(),
-          merchant: extra.merchant ?? extra.website ?? transaction.brand_name ?? transaction.product?.title ?? "Unknown merchant",
-          saleAmount: transaction.order_amount,
-          commission: transaction.commission_amount,
-          currency: extra.currency ?? "USD",
-          status: transaction.status,
-        };
-      });
-      const summary = transactionsPage.response.summary as
-        | (typeof transactionsPage.response.summary & { total_sales?: number; currency?: string })
-        | undefined;
-      const salesAmount = summary?.total_sales ?? transactions.reduce((sum, transaction) => sum + transaction.saleAmount, 0);
-      const currency = summary?.currency ?? transactions[0]?.currency ?? "USD";
-      return {
-        clicks: clicksPage.response.summary?.total_clicks ?? clicksPage.response.total_count,
-        sales: summary?.total_count ?? transactionsPage.response.total_count,
-        transactions,
-        totals: {
-          sales: salesAmount,
-          commission: summary?.total_commission ?? transactions.reduce((sum, transaction) => sum + transaction.commission, 0),
-          currency,
-        },
-      };
     },
   };
 }

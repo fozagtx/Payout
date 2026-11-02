@@ -119,6 +119,7 @@ export function CheckoutComplete() {
         <p className="mt-2 text-ink-soft">
           {partiallyRefunded ? "PayPal confirmed a partial refund for this order." : "Thanks! PayPal confirmed your payment."}
         </p>
+        <p className="mt-2 text-xs text-muted-foreground">Test mode: no real money is charged and no item is shipped.</p>
         <OrderSummary order={state.order} />
         <ReturnHint />
         {actions}
@@ -154,6 +155,7 @@ export function CheckoutComplete() {
       </StatusIcon>
       <h1 className="mt-5 text-[32px] leading-[1.05] font-semibold tracking-[-0.045em] text-ink sm:text-[40px]">{title}</h1>
       <p className="mx-auto mt-2 max-w-md text-ink-soft">{message}</p>
+      <p className="mt-2 text-xs text-muted-foreground">Test mode: no real money is charged and no item is shipped.</p>
       {order ? <OrderSummary order={order} /> : null}
       <p className="mt-6 flex items-center justify-center gap-2 text-sm text-ink-soft">
         <ChatIcon className="h-4 w-4" /> Head back to Claude and ask it to try the checkout again.

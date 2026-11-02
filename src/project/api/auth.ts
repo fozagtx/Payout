@@ -3,7 +3,6 @@ import { rateLimit } from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { hashPassword, usernameKey, validateCredentials, verifyPassword } from "../../lib/password.js";
-import { isMerchant } from "../admin.js";
 import { users } from "../schema.js";
 import { safeNext, type AppSession } from "../session.js";
 
@@ -81,7 +80,7 @@ export function createAuthRouter(db: Database, session: AppSession) {
       if (!user) {
         response.status(401).json({
           error: "unknown_user",
-          message: "No account with that username. Create one — it takes a few seconds.",
+          message: "No account with that username. Create one in a few seconds.",
         });
         return;
       }
@@ -115,7 +114,7 @@ export function createAuthRouter(db: Database, session: AppSession) {
         response.status(401).json({ error: "not_signed_in" });
         return;
       }
-      response.json({ user: { ...user, role: isMerchant(user.username) ? "merchant" : "buyer" } });
+      response.json({ user });
     } catch (error) {
       next(error);
     }

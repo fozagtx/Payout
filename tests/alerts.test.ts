@@ -1,19 +1,20 @@
-import type { AddressInfo } from "node:net";
 import express from "express";
+import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
 import { Webhook } from "svix";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Product } from "@channel3/sdk/resources";
-import { createWatchesRouter } from "../src/project/api/watches.js";
 import { Channel3ProductProcessingError } from "../src/project/channel3/storefront.js";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
-import { priceWatches, products } from "../src/project/schema.js";
+import { priceWatches } from "../src/project/schema.js";
+import type { SelectedOptions } from "../src/project/services.js";
+import { createWatchesRouter } from "../src/project/api/watches.js";
 import { createCookieSession } from "../src/project/session.js";
-import type { Catalog, Product as CatalogProduct, SelectedOptions } from "../src/project/services.js";
 import { callTool, issueAccessToken, signUp, startServer, type TestServer } from "./helpers/harness.js";
 import { fakeCatalog, fakePayments } from "./helpers/shop-fakes.js";
 
 const WEBHOOK_SECRET = "whsec_dGVzdC1zZWNyZXQ=";
+const catalog = fakeCatalog();
 
 function sdkProduct(id: string, price = 120): Product {
   return {
@@ -29,7 +30,6 @@ const storefrontInputs = {
   subscribed: [] as string[],
   unsubscribed: [] as string[],
   subscribeError: undefined as Error | undefined,
-  earnings: [] as { userId?: string; days?: number }[],
 };
 
 const storefront: Storefront = {
@@ -69,23 +69,6 @@ const storefront: Storefront = {
   async unsubscribe(subscriptionId) {
     storefrontInputs.unsubscribed.push(subscriptionId);
   },
-  async earnings(userId, days) {
-    storefrontInputs.earnings.push({ ...(userId ? { userId } : {}), ...(days === undefined ? {} : { days }) });
-    return {
-      clicks: 12,
-      sales: 2,
-      transactions: [{ date: "2026-10-01T00:00:00.000Z", merchant: "Shop", saleAmount: 50, commission: 4.5, currency: "USD", status: "PAID" }],
-      totals: { sales: 50, commission: 4.5, currency: "USD" },
-    };
-  },
-};
-
-const catalog: Catalog = {
-  search: async () => [],
-  async get(id) {
-    const product: CatalogProduct = { id, title: "Product", priceCents: 100, currency: "USD", inStock: true };
-    return product;
-  },
 };
 
 const paypal = fakePayments();
@@ -94,12 +77,10 @@ let alice: { cookie: string; userId: string; token: string };
 let bob: { cookie: string; userId: string };
 
 beforeAll(async () => {
-  process.env.PAYOUT_ADMIN_USERNAMES = "watcher_a";
   storefrontInputs.product.length = 0;
   storefrontInputs.subscribed.length = 0;
   storefrontInputs.unsubscribed.length = 0;
   storefrontInputs.subscribeError = undefined;
-  storefrontInputs.earnings.length = 0;
   server = await startServer(
     { catalog: fakeCatalog(), payments: paypal.payments, storefront },
     { CHANNEL3_WEBHOOK_SECRET: WEBHOOK_SECRET }
@@ -108,7 +89,7 @@ beforeAll(async () => {
   alice = { ...a, token: (await issueAccessToken(server.db, server.baseUrl, a.userId)).token };
   bob = await signUp(server.baseUrl, "watcher_b");
 });
-afterAll(() => { delete process.env.PAYOUT_ADMIN_USERNAMES; return server.close(); });
+afterAll(() => server.close());
 
 const post = (path: string, body: unknown, cookie?: string) =>
   fetch(`${server.baseUrl}${path}`, {
@@ -170,7 +151,7 @@ describe("/api/watches", () => {
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
         error: "product_processing",
-        message: "Channel3 is still processing this product — try again in a minute",
+        message: "Channel3 is still processing this product. Try again in a minute.",
       });
       expect(await server.db.select().from(priceWatches).where(eq(priceWatches.productId, "p-processing"))).toEqual([]);
     } finally {
@@ -196,7 +177,7 @@ describe("POST /channel3/webhook", () => {
       expect(response.status).toBe(503);
       expect((await response.json()).error).toBe("channel3_webhook_not_configured");
     } finally {
-      await new Promise<void>((resolve, reject) => http.close((error) => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) => http.close((error?: Error) => error ? reject(error) : resolve()));
     }
   });
 
@@ -270,43 +251,8 @@ describe("POST /channel3/webhook", () => {
   });
 });
 
-describe("Channel3 earnings and MCP watch tools", () => {
-  it("returns order revenue with no Channel3 section when Channel3 isn't configured", async () => {
-    const app = express().use(
-      createWatchesRouter(
-        server.db,
-        createCookieSession("test-secret-test-secret-test-secret-123", false),
-        { catalog, payments: paypal.payments, publicUrl: server.baseUrl },
-        WEBHOOK_SECRET
-      )
-    );
-    const http = app.listen(0, "127.0.0.1");
-    await new Promise((resolve) => http.once("listening", resolve));
-    const baseUrl = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;
-    try {
-      const response = await fetch(`${baseUrl}/api/earnings`, { headers: { cookie: alice.cookie } });
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.channel3).toBeNull();
-    expect(body.revenue).toMatchObject({ orders: 0, currency: "USD" });
-    } finally {
-      await new Promise<void>((resolve, reject) => http.close((error) => error ? reject(error) : resolve()));
-    }
-  });
-
-  it("requires a session and returns the signed-in user's earnings", async () => {
-    expect((await fetch(`${server.baseUrl}/api/earnings`)).status).toBe(401);
-    const response = await fetch(`${server.baseUrl}/api/earnings?days=14`, { headers: { cookie: alice.cookie } });
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.channel3).toMatchObject({ clicks: 12, sales: 2, totals: { sales: 50, commission: 4.5, currency: "USD" } });
-    expect(body.revenue).toMatchObject({ currency: "USD" });
-    expect(storefrontInputs.earnings.at(-1)).toEqual({  userId: undefined, days: 14 });
-    expect((await fetch(`${server.baseUrl}/api/earnings?days=91`, { headers: { cookie: alice.cookie } })).status).toBe(400);
-  });
-
+describe("MCP price watch tools", () => {
   it("creates a price watch and lists it through MCP", async () => {
-    await server.db.insert(products).values({ title: "Watched Shoe", priceCents: 12000, currency: "USD", channel3Id: "p-mcp" });
     const created = await callTool(server.baseUrl, alice.token, "watch_price", { product_id: "p-mcp", target_price: 90 });
     expect(created.isError).toBe(false);
     expect(created.data.watch).toMatchObject({

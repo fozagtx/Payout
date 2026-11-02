@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDemoCatalog } from "../src/project/channel3/demo-catalog.js";
-import type { Product } from "../src/project/services.js";
+import type { Catalog, Product } from "../src/project/services.js";
 import { SHOP_WIDGET_URI } from "../src/project/ui/resource.js";
 import { renderShopWidgetHtml } from "../src/project/ui/shop-widget.js";
 import { callTool, issueAccessToken, mcpCall, signUp, startServer, type TestServer } from "./helpers/harness.js";
@@ -33,15 +32,22 @@ const products: Product[] = [
 ];
 
 const searches: { query: string; options: unknown }[] = [];
-const demo = createDemoCatalog(products);
 let failSearch = false;
-const catalog = {
+const catalog: Catalog = {
   search: async (query: string, options?: Record<string, unknown>) => {
     if (failSearch) throw new Error("Channel3 search failed: HTTP 500");
     searches.push({ query, options });
-    return demo.search(query, options);
+    const normalized = query.trim().toLowerCase();
+    const maxPriceCents = typeof options?.maxPriceCents === "number" ? options.maxPriceCents : undefined;
+    const limit = typeof options?.limit === "number" ? options.limit : products.length;
+    return products
+      .filter((product) => {
+        const text = [product.title, product.brand, product.description, product.merchant].filter(Boolean).join(" ").toLowerCase();
+        return (!normalized || text.includes(normalized)) && (maxPriceCents === undefined || product.priceCents <= maxPriceCents);
+      })
+      .slice(0, limit);
   },
-  get: demo.get,
+  get: async (id: string) => products.find((product) => product.id === id),
 };
 
 let server: TestServer;

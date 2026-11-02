@@ -24,7 +24,7 @@ export function HeroCtas({ center = false }: { center?: boolean }) {
       <ButtonLink href="/signup" size="lg">
         Create free account
       </ButtonLink>
-      <ButtonLink href="/login" variant="blue" size="lg">
+      <ButtonLink href="/signup" variant="blue" size="lg">
         Connect Claude <ArrowRightIcon className="h-4 w-4" />
       </ButtonLink>
     </div>

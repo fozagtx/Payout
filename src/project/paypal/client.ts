@@ -231,7 +231,7 @@ export function createPayPalPayments(options: PayPalOptions): Payments {
             experience_context: {
               brand_name: "Payout",
               user_action: "PAY_NOW",
-              shipping_preference: "GET_FROM_FILE",
+              shipping_preference: "NO_SHIPPING",
               return_url: input.returnUrl,
               cancel_url: input.cancelUrl,
             },

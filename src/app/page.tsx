@@ -6,9 +6,16 @@ import { PromptDock } from "./PromptDock.js";
 
 const steps = [
   { icon: UserIcon, title: "Create an account", body: "Pick a username and password. No email, no social login." },
-  { icon: LinkIcon, title: "Copy your personal link", body: "Your dashboard has a link ready to paste." },
-  { icon: PlugIcon, title: "Connect in Claude", body: "Add Payout as a custom connector in Claude (needs a Claude account; connectors require a paid plan) and approve access once." },
+  { icon: LinkIcon, title: "Copy the connector URL", body: "Your dashboard has the connector URL ready to paste." },
+  { icon: PlugIcon, title: "Connect in Claude", body: "Add Payout as a custom connector and approve access once." },
   { icon: ChatIcon, title: "Ask Claude to shop", body: "Browse, pick in the canvas, and pay with PayPal from the chat." },
+];
+
+const builtWith = [
+  { name: "PayPal Orders v2", detail: "Sandbox checkout" },
+  { name: "Channel3", detail: "Product search" },
+  { name: "MCP + MCP Apps", detail: "Tools and in-chat canvas" },
+  { name: "Claude", detail: "Your shopping assistant" },
 ];
 
 function SectionHeading({ eyebrow, children, sub }: { eyebrow: string; children: React.ReactNode; sub?: string }) {
@@ -31,7 +38,7 @@ export default function Home() {
             <ClaudeMark className="h-7 w-7" />
           </FloatingChip>
           <FloatingChip className="top-52 left-[16%]" rotate="6deg">
-            <span className="font-mono text-sm font-semibold text-ink">$39.95</span>
+            <span className="font-mono text-sm font-semibold text-ink">mcp</span>
           </FloatingChip>
           <FloatingChip className="top-24 right-[9%]" rotate="7deg">
             <PayPalMark className="h-7 w-7" />
@@ -40,9 +47,9 @@ export default function Home() {
             <BagIcon className="h-6 w-6 text-tan-ink" />
           </FloatingChip>
 
-          <div className="relative mx-auto max-w-5xl px-4 pt-16 pb-16 text-center sm:px-6 sm:pt-24 sm:pb-20">
+          <div className="relative mx-auto max-w-5xl overflow-x-hidden px-4 pt-16 pb-16 text-center sm:px-6 sm:pt-24 sm:pb-20">
             <p className="animate-rise inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 font-mono text-[11px] tracking-wider text-ink-soft uppercase">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Works inside Claude · PayPal test mode
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Works inside Claude &amp; ChatGPT
             </p>
             <h1 className="animate-rise mt-7 text-[44px] leading-[1.02] font-semibold tracking-[-0.055em] text-ink [animation-delay:60ms] sm:text-7xl md:text-[84px]">
               <span className="mark">Shop from Claude.</span>
@@ -69,8 +76,8 @@ export default function Home() {
           <div className="mt-14 grid gap-4 md:grid-cols-2">
             <div className="flex flex-col rounded-[28px] border border-line bg-paper p-6 sm:p-8">
               <p className="eyebrow">Discover</p>
-              <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-ink">Search the whole store from one chat</h3>
-              <p className="mt-2 text-ink-soft">Claude searches the merchant's catalog and renders results as a canvas you can pick from.</p>
+              <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-ink">Search every store from one chat</h3>
+              <p className="mt-2 text-ink-soft">Claude searches the Channel3 catalog and renders results as a canvas you can pick from.</p>
               <div className="mt-8 flex flex-1 items-center rounded-[20px] bg-cream p-5 sm:p-8">
                 <CanvasPreview />
               </div>
@@ -78,7 +85,7 @@ export default function Home() {
             <div id="checkout" className="flex scroll-mt-20 flex-col rounded-[28px] border border-line bg-paper p-6 sm:p-8">
               <p className="eyebrow">Checkout</p>
               <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-ink">Pay with PayPal, priced by the server</h3>
-              <p className="mt-2 text-ink-soft">Payout builds the PayPal order from the real catalog price and hands you a pay link.</p>
+              <p className="mt-2 text-ink-soft">Payout builds a PayPal Orders v2 order from the real catalog price and hands you a pay link.</p>
               <div className="mt-8 flex flex-1 items-center rounded-[20px] bg-cream p-5 sm:p-8">
                 <OrderPreview />
               </div>
@@ -104,13 +111,13 @@ export default function Home() {
         <section className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
             <div className="relative overflow-hidden rounded-[28px] bg-ink p-6 text-cream sm:p-8">
-              <p className="font-mono text-[12px] tracking-[0.08em] text-tan uppercase">Heads up</p>
-              <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">What you'll need</h3>
-              <p className="mt-2 max-w-md text-cream/70">A Claude account — custom connectors need a paid Claude plan. Your dashboard gives you a personal link to paste in Claude's connector settings.</p>
+              <p className="font-mono text-[12px] tracking-[0.08em] text-tan uppercase">For Claude Code</p>
+              <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">One command to connect</h3>
+              <p className="mt-2 max-w-md text-cream/70">Prefer the terminal? Your dashboard gives you the exact command with your MCP URL filled in.</p>
               <div className="mt-8 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 font-mono text-[13px]">
                 <TerminalIcon className="h-4 w-4 shrink-0 text-tan" />
                 <span className="truncate">
-                  Claude → Settings → Connectors → <span className="text-tan">Add custom connector</span>
+                  claude mcp add --transport http payout <span className="text-tan">&lt;your MCP URL&gt;</span>
                 </span>
               </div>
             </div>
@@ -118,11 +125,23 @@ export default function Home() {
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
                 <ShieldIcon className="h-5 w-5" />
               </span>
-              <h3 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-ink">Test mode by default</h3>
+              <h3 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-ink">Sandbox by default</h3>
               <p className="mt-2 text-ink-soft">
-                Payments run in PayPal test mode, so no real money moves. You approve every app's access once, and you can disconnect any app from the dashboard.
+                Payments run in PayPal Sandbox, so no real money moves. OAuth consent keeps every connector scoped to your account, and you can disconnect any app from the dashboard.
               </p>
             </div>
+          </div>
+        </section>
+
+        <section id="built-with" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20 sm:px-6 sm:py-28">
+          <p className="eyebrow text-center">Built with</p>
+          <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-[22px] border border-line bg-line lg:grid-cols-4">
+            {builtWith.map((item) => (
+              <div key={item.name} className="bg-paper px-5 py-6 text-center">
+                <p className="font-semibold tracking-[-0.02em] text-ink">{item.name}</p>
+                <p className="mt-1 font-mono text-[11px] tracking-wide text-muted-foreground uppercase">{item.detail}</p>
+              </div>
+            ))}
           </div>
         </section>
 

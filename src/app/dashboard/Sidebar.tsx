@@ -4,7 +4,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "@/components/Link.js";
 import { usePathname } from "next/navigation.js";
 import { Button } from "@/components/Button.js";
-import { BarChart3, Bell, ReceiptText, Store, Wallet } from "lucide-react";
+import { BarChart3, Bell, Store } from "lucide-react";
 import { BagIcon, HomeIcon, LogoutIcon, PayPalMark, PlugIcon, SidebarIcon, type IconProps } from "@/components/Icons.js";
 import { Logo, LogoMark } from "@/components/Logo.js";
 
@@ -12,16 +12,12 @@ const STORAGE_KEY = "payout:sidebar-collapsed";
 
 export const sections: { href: string; label: string; icon: ComponentType<IconProps> }[] = [
   { href: "/dashboard", label: "Connect Claude", icon: HomeIcon },
+  { href: "/shop", label: "Shop", icon: Store },
   { href: "/dashboard/orders", label: "Orders", icon: BagIcon },
   { href: "/dashboard/alerts", label: "Price alerts", icon: Bell },
+  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/apps", label: "Connected apps", icon: PlugIcon },
   { href: "/dashboard/paypal", label: "PayPal", icon: PayPalMark },
-];
-export const merchantSections = [
-  { href: "/dashboard/merchant/orders", label: "Orders", icon: ReceiptText },
-  { href: "/dashboard/merchant/products", label: "Products", icon: Store },
-  { href: "/dashboard/merchant/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/merchant/earnings", label: "Earnings", icon: Wallet },
 ];
 
 export function useCollapsed() {
@@ -44,14 +40,12 @@ export function Sidebar({
   onToggle,
   onLogout,
   loggingOut,
-  role,
 }: {
   username: string;
   collapsed: boolean;
   onToggle: () => void;
   onLogout: () => void;
   loggingOut: boolean;
-  role: "merchant" | "buyer";
 }) {
   const pathname = usePathname();
   const item = `flex h-10 items-center gap-3 rounded-xl text-sm transition-colors hover:bg-ink/5 hover:text-ink ${collapsed ? "justify-center px-0" : "px-3"}`;
@@ -95,20 +89,6 @@ export function Sidebar({
             {collapsed ? <span className="sr-only">{section.label}</span> : section.label}
           </Link>
         ))}
-        {role === "merchant" ? (
-          <>
-            <p className="eyebrow px-3 pb-2 pt-5">Merchant</p>
-            {merchantSections.map((section) => (
-              <Link key={section.href} href={section.href} aria-current={pathname === section.href ? "page" : undefined} className={`${item} ${pathname === section.href ? "bg-ink/5 font-semibold text-ink" : "text-ink-soft"}`} title={collapsed ? section.label : undefined}>
-                <section.icon className="h-[18px] w-[18px] shrink-0" />{collapsed ? <span className="sr-only">{section.label}</span> : section.label}
-              </Link>
-            ))}
-          </>
-        ) : null}
-        <Link href="/shop" className={item} title={collapsed ? "Shop" : undefined}>
-          <Store className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-          {collapsed ? <span className="sr-only">Shop</span> : "Shop"}
-        </Link>
       </nav>
 
       <div className="border-t border-line p-3">

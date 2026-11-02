@@ -7,9 +7,9 @@ import type { Database } from "../../db/client.js";
 import { isInStock } from "../../lib/format.js";
 import { logTool, result } from "../../mcp-kit/index.js";
 import { signImageUrl } from "../api/images.js";
+import { normaliseProduct } from "../channel3/client.js";
 import { Channel3ProductProcessingError } from "../channel3/storefront.js";
 import { priceWatches } from "../schema.js";
-import { getStoreProduct, similarStoreProducts, storeProductsByChannel3Ids, toChannel3Product, toProduct } from "../store/catalog.js";
 import type { Product, Services } from "../services.js";
 import { SHOP_WIDGET_URI } from "../ui/resource.js";
 import { renderShopWidgetHtml } from "../ui/shop-widget.js";
@@ -28,9 +28,11 @@ function formatPrice(cents: number, currency: string) {
   }
 }
 
+const toCatalogProduct = (product: unknown) => normaliseProduct(product as Parameters<typeof normaliseProduct>[0]);
+
 const NO_STOREFRONT = {
   code: "search_not_configured",
-  message: "This needs CHANNEL3_API_KEY on the Payout server.",
+  message: "This store doesn't offer that feature.",
 };
 
 function errorMessage(error: unknown) {
@@ -105,9 +107,9 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
     {
       title: "Search products",
       description:
-        "Search real products from online stores and show them to the user in an interactive product grid " +
-        "inside the chat. In that grid the user can select items, choose quantities, and pay with PayPal " +
-        "(they approve the payment on PayPal; no money moves without their approval). Call this whenever the " +
+        "Search the live Channel3 catalog and show matching products in an interactive product grid " +
+        "inside the chat. In that grid the user can select items, choose quantities, and pay with PayPal Sandbox. " +
+        "No real money is charged and no item is shipped. Call this whenever the " +
         "user wants to shop, browse, find, compare or buy something, e.g. \"find me running shoes under $100\". " +
         "Use a short, concrete search query (product type plus key attributes). Afterwards, briefly comment " +
         "on the results instead of repeating the whole list, since the user already sees the grid.",
@@ -129,29 +131,33 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
       if (error) return result(error, true);
       const logged = { query: args.query, max_price: args.max_price, limit: args.limit, image_url: args.image_url };
       if (args.image_url && !services.storefront) {
-        return result({ code: "search_not_configured", message: "Image search needs CHANNEL3_API_KEY on the Payout server." }, true);
+        return result({ code: "search_not_configured", message: "Product search isn't configured on this server (CHANNEL3_API_KEY missing)" }, true);
       }
+      const budget = args.query.match(/\bunder\s+\$?([\d,]+(?:\.\d{1,2})?)/i);
+      const query = budget ? args.query.replace(budget[0], "").trim() : args.query;
+      const maxPrice = args.max_price ?? (budget ? Number(budget[1]!.replaceAll(",", "")) : undefined);
       let products: Product[];
       try {
         if (args.image_url && services.storefront) {
-          // Channel3 finds the products; only what this store sells is shown.
           const page = await services.storefront.search({
-            query: args.query,
+            query,
             imageUrl: args.image_url,
-            filters: { availability: ["InStock"], ...(args.max_price !== undefined ? { price: { max_price: args.max_price } } : {}) },
+            filters: { availability: ["InStock"], ...(maxPrice !== undefined ? { price: { max_price: maxPrice } } : {}) },
             userId: context.userId,
           });
-          const rows = await storeProductsByChannel3Ids(db, (page.products ?? []).map((p) => p.id));
-          products = rows.map(toProduct).slice(0, args.limit);
+          products = page.products.map(toCatalogProduct).filter((p): p is Product => p !== undefined).slice(0, args.limit);
         } else {
-          products = await services.catalog.search(args.query, {
+          products = await services.catalog.search(query, {
             limit: args.limit,
-            ...(args.max_price !== undefined ? { maxPriceCents: Math.round(args.max_price * 100) } : {}),
+            ...(maxPrice !== undefined ? { maxPriceCents: Math.round(maxPrice * 100) } : {}),
           });
         }
       } catch (caught) {
         const message = errorMessage(caught);
         await logTool(db, context.connectionId, "search_products", logged, "error", message);
+        if (message.includes("CHANNEL3_API_KEY missing")) {
+          return result({ code: "search_not_configured", message: "Product search isn't configured on this server (CHANNEL3_API_KEY missing)" }, true);
+        }
         return result({ code: "catalog_unavailable", message: "Product search is unavailable right now. Try again shortly." }, true);
       }
       await logTool(db, context.connectionId, "search_products", logged, "allowed");
@@ -230,15 +236,18 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
     async (args, extra) => {
       const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
       if (error) return result(error, true);
+      if (!services.storefront) return result(NO_STOREFRONT, true);
       try {
-        const row = await getStoreProduct(db, args.product_id);
-        if (!row) {
+        const [product, history] = await Promise.all([
+          services.storefront.product(args.product_id, args.selected_options, context.userId),
+          services.storefront.priceHistory(args.product_id).catch(() => undefined),
+        ]);
+        if (!product) {
           await logTool(db, context.connectionId, "get_product_details", args, "rejected", "product_not_found");
           return result({ code: "product_not_found", product_id: args.product_id }, true);
         }
-        const history = row.channel3Id && services.storefront ? await services.storefront.priceHistory(row.channel3Id).catch(() => undefined) : undefined;
         await logTool(db, context.connectionId, "get_product_details", args, "allowed");
-        return result(productDetails(toChannel3Product(row, { selected: args.selected_options }) as unknown as Channel3Product, history));
+        return result(productDetails(product, history));
       } catch (caught) {
         await logTool(db, context.connectionId, "get_product_details", args, "error", errorMessage(caught));
         return result({ code: "catalog_unavailable", message: "Product details are unavailable right now." }, true);
@@ -290,12 +299,10 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
       if (error) return result(error, true);
       if (!services.storefront) return result(NO_STOREFRONT, true);
       try {
-        const row = (await getStoreProduct(db, args.product_id)) ?? (await storeProductsByChannel3Ids(db, [args.product_id]))[0];
-        const watchId = row?.channel3Id ?? args.product_id;
         const [existing] = await db
           .select()
           .from(priceWatches)
-          .where(and(eq(priceWatches.userId, context.userId), eq(priceWatches.productId, watchId)))
+          .where(and(eq(priceWatches.userId, context.userId), eq(priceWatches.productId, args.product_id)))
           .limit(1);
         if (existing) {
           const subscriptionId = await services.storefront.subscribe(args.product_id);
@@ -303,16 +310,7 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
           await logTool(db, context.connectionId, "watch_price", args, "allowed");
           return result({ watch: watch ?? { ...existing, subscriptionId } });
         }
-        if (row && !row.channel3Id) {
-          await logTool(db, context.connectionId, "watch_price", args, "rejected", "product_not_found");
-          return result({
-            code: "product_not_found",
-            message: "Price watching isn't available for this product — the merchant added it directly.",
-            product_id: args.product_id,
-          }, true);
-        }
-        const productId = row?.channel3Id ?? args.product_id;
-        const product = await services.storefront.product(productId, undefined, context.userId);
+        const product = await services.storefront.product(args.product_id, undefined, context.userId);
         if (!product) {
           await logTool(db, context.connectionId, "watch_price", args, "rejected", "product_not_found");
           return result({ code: "product_not_found", product_id: args.product_id }, true);
@@ -405,12 +403,16 @@ export function registerCatalogTools(server: McpServer, db: Database, services: 
     async (args, extra) => {
       const { context, error } = await toolContext(db, extra.authInfo, "shop:browse");
       if (error) return result(error, true);
+      if (!services.storefront) return result(NO_STOREFRONT, true);
       let products: Product[];
       try {
-        const row = await getStoreProduct(db, args.product_id);
-        const similarRows = row ? await similarStoreProducts(db, row, args.limit * 2) : [];
-        const maxCents = args.max_price === undefined ? undefined : Math.round(args.max_price * 100);
-        products = similarRows.map(toProduct).filter((p) => maxCents === undefined || p.priceCents <= maxCents).slice(0, args.limit);
+        const similar = await services.storefront.similar(
+          args.product_id,
+          args.limit,
+          { availability: ["InStock"], ...(args.max_price !== undefined ? { price: { max_price: args.max_price } } : {}) },
+          context.userId
+        );
+        products = similar.map(toCatalogProduct).filter((p): p is Product => p !== undefined);
       } catch (caught) {
         await logTool(db, context.connectionId, "find_similar_products", args, "error", errorMessage(caught));
         return result({ code: "catalog_unavailable", message: "Similar products are unavailable right now." }, true);
