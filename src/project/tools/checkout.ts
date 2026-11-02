@@ -1,5 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import type { Database } from "../../db/client.js";
 import { logTool, result } from "../../mcp-kit/index.js";
@@ -208,8 +208,8 @@ export function registerCheckoutTools(server: McpServer, db: Database, services:
   server.registerTool(
     "get_earnings",
     {
-      title: "Get Channel3 earnings",
-      description: "Show the store owner's Channel3 clicks, sales and commission for a recent reporting window.",
+      title: "Get store revenue",
+      description: "Show the store owner's real order revenue: paid order totals minus refunds for a recent window.",
       inputSchema: { days: z.number().int().min(1).max(90).default(30).describe("Reporting window in days, from 1 to 90.") },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -221,20 +221,33 @@ export function registerCheckoutTools(server: McpServer, db: Database, services:
         await logTool(db, context.connectionId, "get_earnings", args, "rejected", "merchant_only");
         return result({ code: "merchant_only", message: "Earnings are only available to the store owner." }, true);
       }
-      if (!services.storefront) {
-        return result({ code: "search_not_configured", message: "Earnings reporting needs CHANNEL3_API_KEY on the Payout server." }, true);
-      }
       try {
-        const earnings = await services.storefront.earnings(undefined, args.days);
+        const since = new Date(Date.now() - args.days * 24 * 60 * 60 * 1000);
+        const rows = await db
+          .select({ status: orders.status, totalCents: orders.totalCents, currency: orders.currency, refunds: orders.refunds })
+          .from(orders)
+          .where(sql`${orders.createdAt} >= ${since}`);
+        const paid = rows.filter((row) => ["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(row.status));
+        const currency = paid[0]?.currency ?? "USD";
+        const grossCents = paid.reduce((sum, row) => sum + row.totalCents, 0);
+        const refundedCents = paid.reduce((sum, row) => sum + (row.refunds ?? []).reduce((s, refund) => s + refund.cents, 0), 0);
+        const earnings = {
+          days: args.days,
+          currency,
+          orders: paid.length,
+          gross_sales: grossCents / 100,
+          refunds: refundedCents / 100,
+          net_revenue: (grossCents - refundedCents) / 100,
+        };
         await logTool(db, context.connectionId, "get_earnings", args, "allowed");
-        const summary = `${earnings.clicks} clicks, ${earnings.sales} sales, ${earnings.totals.commission.toFixed(2)} ${earnings.totals.currency} commission in the last ${args.days} days. Channel3 reporting may lag.`;
+        const summary = `${earnings.orders} order${earnings.orders === 1 ? "" : "s"}, ${earnings.gross_sales.toFixed(2)} ${currency} sales, ${earnings.refunds.toFixed(2)} ${currency} refunded, ${earnings.net_revenue.toFixed(2)} ${currency} net revenue in the last ${args.days} days.`;
         return {
           content: [{ type: "text" as const, text: `${summary}\n${JSON.stringify(earnings)}` }],
           structuredContent: earnings,
         };
       } catch (caught) {
         await logTool(db, context.connectionId, "get_earnings", args, "error", caught instanceof Error ? caught.message : String(caught));
-        return result({ code: "reporting_unavailable", message: "Channel3 earnings are unavailable right now." }, true);
+        return result({ code: "reporting_unavailable", message: "Revenue reporting is unavailable right now." }, true);
       }
     }
   );

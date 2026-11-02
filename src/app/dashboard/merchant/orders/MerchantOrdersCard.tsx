@@ -194,7 +194,7 @@ export function MerchantOrdersCard() {
                 No refund requests waiting.
               </p>
               <p className="mt-1 text-sm text-ink-soft">
-                Buyers request refunds from their Orders page or through Claude.
+                Buyers request refunds from their Orders page or through Claude. You fulfill and ship every order.
               </p>
             </div>
           )

@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Earnings" };
 export default function Page() {
   return (
     <section>
-      <PageHeading title="Earnings" description="Channel3 clicks, sales and commissions from your store links." />
+      <PageHeading title="Earnings" description="Your order revenue, plus commission the catalog pays on supplier sales." />
       <EarningsCard />
     </section>
   );

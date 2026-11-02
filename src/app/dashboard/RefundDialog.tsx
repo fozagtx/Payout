@@ -70,7 +70,8 @@ export function RefundDialog({
     setPartial(Boolean(initial && initial.amountCents < remaining));
     setAmountInput(initial ? (initial.amountCents / 100).toFixed(2) : "");
     setReason(initial?.reason ?? "");
-    setNote(initial?.note ?? "");
+    // The buyer's note is their complaint to the merchant — never echo it into the merchant's reply.
+    setNote("");
     setLoading(false);
     setServerError(null);
   }, [open, order?.id]);
@@ -159,7 +160,7 @@ export function RefundDialog({
 
               <div>
                 <label htmlFor="refund-note" className="text-sm font-semibold text-ink">
-                  {mode === "request" ? "Message to the store (optional)" : "Message to buyer (optional)"}
+                  {mode === "request" ? "Message to the merchant (optional)" : "Message to buyer (optional)"}
                 </label>
                 <textarea
                   id="refund-note"
@@ -195,11 +196,11 @@ export function RefundDialog({
                 <p className="font-semibold text-ink">
                   {mode === "request" ? (
                     <>
-                      Request a refund of {formatMoney(amountCents ?? 0, order.currency)} from the store.
+                      Request a refund of {formatMoney(amountCents ?? 0, order.currency)} from the merchant.
                     </>
                   ) : (
                     <>
-                      Refund {formatMoney(amountCents ?? 0, order.currency)} to {order.shipping?.name || "the buyer"} through PayPal Sandbox
+                      Refund {formatMoney(amountCents ?? 0, order.currency)} to {order.shipping?.name || "the buyer"} through PayPal
                     </>
                   )}
                 </p>
@@ -210,14 +211,14 @@ export function RefundDialog({
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {mode === "request" ? "Message to the store" : "Message to buyer"}
+                    {mode === "request" ? "Message to the merchant" : "Message to buyer"}
                   </p>
                   <p className="mt-1 whitespace-pre-wrap text-ink">{trimmedNote || "No message"}</p>
                 </div>
               </div>
               <p className="text-sm font-medium text-amber-800">
                 {mode === "request"
-                  ? "No money moves until the store approves. You can cancel while it's pending."
+                  ? "No money moves until the merchant approves. You can cancel while it's pending."
                   : "Refunds can't be undone."}
               </p>
               {serverError ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{serverError}</p> : null}

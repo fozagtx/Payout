@@ -18,7 +18,8 @@ export const sections: { href: string; label: string; icon: ComponentType<IconPr
   { href: "/dashboard/paypal", label: "PayPal", icon: PayPalMark },
 ];
 export const merchantSections = [
-  { href: "/dashboard/merchant/orders", label: "Refund requests", icon: ReceiptText },
+  { href: "/dashboard/merchant/orders", label: "Orders", icon: ReceiptText },
+  { href: "/dashboard/merchant/products", label: "Products", icon: Store },
   { href: "/dashboard/merchant/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/merchant/earnings", label: "Earnings", icon: Wallet },
 ];

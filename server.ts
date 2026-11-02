@@ -14,7 +14,7 @@ import { createLiveServices } from "./src/project/services-live.js";
 const config = loadConfig();
 const stopLocalDatabase = await ensureDatabaseUrl();
 const { db, pool } = createDatabase();
-const { app, provider } = createApp(db, config, createLiveServices(config));
+const { app, provider } = createApp(db, config, createLiveServices(config, db));
 
 // Next.js ships CommonJS; under NodeNext the callable is its `default`.
 const createNext = ((nextModule as unknown as { default?: typeof nextModule }).default ?? nextModule) as unknown as typeof nextModule.default;
