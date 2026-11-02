@@ -2,7 +2,7 @@
 
 **Shop real stores from inside Claude or ChatGPT: search live Channel3 products, pay with PayPal Sandbox, and refund your own orders without leaving the chat.**
 
-| [Live app](https://payout-xzgc.onrender.com) · [Inspiration](#inspiration) · [What it does](#what-it-does) · [How I built it](#how-i-built-it) · [Challenges](#challenges-i-ran-into) · [Accomplishments](#accomplishments-im-proud-of) · [What I learned](#what-i-learned) · [What's next](#whats-next) · [Built with](#built-with) · [Connect Claude or ChatGPT](#connect-claude-or-chatgpt) · [Architecture](#architecture) · [MCP tools](#mcp-tools) · [Configuration](#configuration) · [Run locally](#run-locally) · [Deploy on Render](#deploy-on-render) · [Checks](#checks) · [License](#license) |
+| [Live app](https://payout-xzgc.onrender.com) · [Inspiration](#inspiration) · [What it does](#what-it-does) · [How I built it](#how-i-built-it) · [Challenges](#challenges-i-ran-into) · [Accomplishments](#accomplishments-im-proud-of) · [What I learned](#what-i-learned) · [What's next](#whats-next) · [Built with](#built-with) · [Connect Claude or ChatGPT](#connect-claude-or-chatgpt) · [Architecture](#architecture) · [MCP tools](#mcp-tools) · [Agent tasks](#agent-tasks) · [Configuration](#configuration) · [Run locally](#run-locally) · [Deploy on Render](#deploy-on-render) · [Checks](#checks) · [License](#license) |
 | --- |
 
 - **Live app:** https://payout-xzgc.onrender.com
@@ -127,6 +127,25 @@ PayPal and Channel3 webhooks (`/paypal/webhook`, `/channel3/webhook`) move order
 | `list_disputes` | List PayPal disputes on your orders. |
 | `whoami`, `get_activity` | Show your account and recent tool calls. |
 
+## Agent tasks
+
+Once Payout is connected, you can ask Claude or ChatGPT to do these in plain words. Each one runs the MCP tools above against your own account.
+
+| Ask | What happens |
+| --- | --- |
+| "Find me running shoes under $120." | `search_products` returns live Channel3 products, filtered by price. |
+| "Show me the sizes, colours and store prices for the second one." | `get_product_details` shows variants, prices at each store and price history. |
+| "Find something similar but cheaper." | `find_similar_products` returns lookalike items. |
+| "Is this link cheaper anywhere else?" plus a product URL | `compare_link` looks it up and compares store prices. |
+| "Tell me when this drops below $90 or comes back in stock." | `watch_price` starts a Channel3 price watch; `list_price_watches` shows them. |
+| "Buy it in size 10." | `create_checkout` re-checks the price and returns a PayPal Sandbox checkout link. |
+| "Did my order go through?" / "Show my orders." | `get_order_status` and `list_orders` read your orders. |
+| "Refund that order." / "Refund $20 of it." | `refund_order` refunds all or part of one of your paid orders through PayPal Sandbox. |
+| "Do I have any disputes?" | `list_disputes` lists PayPal disputes on your orders. |
+| "What have you done on my account?" | `get_activity` shows your recent tool calls. |
+
+Payments are PayPal Sandbox only: no real money moves and nothing ships.
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Only the first three variables are needed for a working shop.
@@ -159,7 +178,21 @@ To pay in the sandbox, use a PayPal sandbox buyer account or a test card from Pa
 
 ## Deploy on Render
 
-`render.yaml` defines a single Node web service. Create it from the blueprint, fill in `CHANNEL3_API_KEY`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and (recommended) `DATABASE_URL`, then deploy. Migrations run on each start.
+`render.yaml` defines a single Node web service (free plan, health check at `/health`). Migrations run on every start.
+
+1. Fork this repo, then in Render click **New → Blueprint** and pick the fork. Render reads `render.yaml` and creates the `payout` web service.
+2. Create a database that survives restarts: a Render **Postgres** (copy its **Internal Database URL**) or a Neon project (copy its connection string).
+3. In **payout → Environment**, set:
+   - `CHANNEL3_API_KEY`: from https://trychannel3.com
+   - `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`: from a PayPal **sandbox** REST app
+   - `DATABASE_URL`: the URL from step 2
+   - Optional: `PAYPAL_WEBHOOK_ID` and `CHANNEL3_WEBHOOK_SECRET` (see [Configuration](#configuration))
+
+   `SESSION_SECRET`, `NODE_ENV` and `TRUST_PROXY` are already set by the blueprint.
+4. Click **Save, rebuild, and deploy**.
+5. Check `https://<your-service>.onrender.com/health`, sign up, and use `https://<your-service>.onrender.com/mcp` as the connector URL.
+
+Without `DATABASE_URL`, Payout runs a bundled Postgres on the instance disk, and Render wipes it on every restart, so accounts and orders disappear.
 
 ## Checks
 
