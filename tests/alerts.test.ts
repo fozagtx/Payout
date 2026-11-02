@@ -7,7 +7,7 @@ import type { Product } from "@channel3/sdk/resources";
 import { createWatchesRouter } from "../src/project/api/watches.js";
 import { Channel3ProductProcessingError } from "../src/project/channel3/storefront.js";
 import type { Storefront, StorefrontSearch } from "../src/project/channel3/storefront.js";
-import { priceWatches, products } from "../src/project/schema.js";
+import { priceWatches } from "../src/project/schema.js";
 import { createCookieSession } from "../src/project/session.js";
 import type { Catalog, Product as CatalogProduct, SelectedOptions } from "../src/project/services.js";
 import { callTool, issueAccessToken, signUp, startServer, type TestServer } from "./helpers/harness.js";
@@ -271,7 +271,7 @@ describe("POST /channel3/webhook", () => {
 });
 
 describe("Channel3 earnings and MCP watch tools", () => {
-  it("returns order revenue with no Channel3 section when Channel3 isn't configured", async () => {
+  it("returns 503 when Channel3 isn't configured", async () => {
     const app = express().use(
       createWatchesRouter(
         server.db,
@@ -285,10 +285,8 @@ describe("Channel3 earnings and MCP watch tools", () => {
     const baseUrl = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;
     try {
       const response = await fetch(`${baseUrl}/api/earnings`, { headers: { cookie: alice.cookie } });
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.channel3).toBeNull();
-    expect(body.revenue).toMatchObject({ orders: 0, currency: "USD" });
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toBe("search_not_configured");
     } finally {
       await new Promise<void>((resolve, reject) => http.close((error) => error ? reject(error) : resolve()));
     }
@@ -298,15 +296,12 @@ describe("Channel3 earnings and MCP watch tools", () => {
     expect((await fetch(`${server.baseUrl}/api/earnings`)).status).toBe(401);
     const response = await fetch(`${server.baseUrl}/api/earnings?days=14`, { headers: { cookie: alice.cookie } });
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.channel3).toMatchObject({ clicks: 12, sales: 2, totals: { sales: 50, commission: 4.5, currency: "USD" } });
-    expect(body.revenue).toMatchObject({ currency: "USD" });
+    expect(await response.json()).toMatchObject({ clicks: 12, sales: 2, totals: { sales: 50, commission: 4.5, currency: "USD" } });
     expect(storefrontInputs.earnings.at(-1)).toEqual({  userId: undefined, days: 14 });
     expect((await fetch(`${server.baseUrl}/api/earnings?days=91`, { headers: { cookie: alice.cookie } })).status).toBe(400);
   });
 
   it("creates a price watch and lists it through MCP", async () => {
-    await server.db.insert(products).values({ title: "Watched Shoe", priceCents: 12000, currency: "USD", channel3Id: "p-mcp" });
     const created = await callTool(server.baseUrl, alice.token, "watch_price", { product_id: "p-mcp", target_price: 90 });
     expect(created.isError).toBe(false);
     expect(created.data.watch).toMatchObject({

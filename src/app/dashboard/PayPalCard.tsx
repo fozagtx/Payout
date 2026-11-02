@@ -48,7 +48,7 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
       <CardHeader
         icon={<PayPalMark className="h-5 w-5" />}
         title="PayPal"
-        description="Checkout runs in PayPal test mode — no real money moves."
+        description="Checkout runs on PayPal Sandbox."
         action={user.paypalEmail ? <Pill tone="green">Linked</Pill> : <Pill tone="slate">Optional</Pill>}
       />
       <CardBody className="space-y-4">
@@ -76,7 +76,7 @@ export function PayPalCard({ user, onChange }: { user: User; onChange: (email: s
         ) : (
           <form onSubmit={onSubmit} noValidate className="space-y-2">
             <label htmlFor={`${id}-email`} className="block text-sm font-medium text-ink-soft">
-              PayPal test buyer email
+              Sandbox buyer email
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input

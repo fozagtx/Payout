@@ -341,7 +341,7 @@ export async function requestRefund(
       throw new OrderError("not_refundable", "Only paid orders can be refunded.");
     }
     if (current.refundRequest?.status === "pending") {
-      throw new OrderError("request_pending", "A refund request is already waiting for the merchant.");
+      throw new OrderError("request_pending", "A refund request is already waiting for the store.");
     }
     const remaining = remainingRefundCents(current);
     const amount = input.amountCents ?? remaining;

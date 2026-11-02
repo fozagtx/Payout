@@ -74,40 +74,6 @@ export const priceWatches = pgTable(
   ]
 );
 
-export interface StoreOption {
-  name: string;
-  values: string[];
-}
-
-/**
- * The merchant's own catalog: what the store actually sells. Rows are added
- * by hand or imported from Channel3 — `channel3Id`/`supplier*` record where a
- * product was sourced so price history and restock can still come from
- * Channel3 while the sale is the merchant's own.
- */
-export const products = pgTable(
-  "products",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    title: text("title").notNull(),
-    brand: text("brand"),
-    description: text("description"),
-    imageUrls: jsonb("image_urls").$type<string[]>().notNull().default([]),
-    priceCents: integer("price_cents").notNull(),
-    currency: text("currency").notNull().default("USD"),
-    compareAtCents: integer("compare_at_cents"),
-    inStock: boolean("in_stock").notNull().default(true),
-    options: jsonb("options").$type<StoreOption[]>().notNull().default([]),
-    channel3Id: text("channel3_id"),
-    supplierName: text("supplier_name"),
-    supplierUrl: text("supplier_url"),
-    supplierCents: integer("supplier_cents"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [index("products_channel3_id_idx").on(table.channel3Id)]
-);
-
 export const webhookEvents = pgTable("webhook_events", {
   id: text("id").primaryKey(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),

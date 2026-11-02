@@ -75,8 +75,8 @@ function Details({ product: initial, priceHistory, onOpen }: { product: Product;
             <ProductDetailsVariants />
             {variants.error ? <p className="text-sm text-red-700">That option couldn’t be loaded. Pick another one.</p> : null}
             <PayWithPayPal product={product} selection={variants.selection} resolving={variants.isResolving} />
-            {(product as Product & { channel3Id?: string | null }).channel3Id ? <WatchPrice product={product} /> : null}
-            <SupplierLine product={product} />
+            <WatchPrice product={product} />
+            <ProductDetailsOffers />
             <ProductDetailsDescription />
             <ProductDetailsAttributes />
             {priceHistory?.statistics || (priceHistory?.history?.length ?? 0) > 0 ? (
@@ -124,32 +124,6 @@ function WatchPrice({ product }: { product: Product }) {
   );
 }
 
-/** Where the merchant gets this product, when it was imported — buyers see who's behind it. */
-function SupplierLine({ product }: { product: Product }) {
-  const supplier = (product as Product & { supplier?: { name: string; url: string; priceCents: number | null } | null }).supplier;
-  if (supplier?.name) {
-    return (
-      <p className="text-sm text-ink-soft">
-        Sourced from{" "}
-        {supplier.url ? (
-          <a className="font-medium text-ink underline" href={supplier.url} target="_blank" rel="noreferrer">
-            {supplier.name}
-          </a>
-        ) : (
-          <span className="font-medium text-ink">{supplier.name}</span>
-        )}
-        . The merchant ships your order.
-      </p>
-    );
-  }
-  return (
-    <>
-      <ProductDetailsOffers />
-      <p className="text-sm text-ink-soft">The merchant ships your order.</p>
-    </>
-  );
-}
-
 /** PayPal Sandbox checkout for the exact variant on screen, at the cheapest in-stock store's price. */
 function PayWithPayPal({ product, selection, resolving }: { product: Product; selection: Record<string, string>; resolving: boolean }) {
   const [state, setState] = useState<{ busy: boolean; error?: string }>({ busy: false });
@@ -178,18 +152,18 @@ function PayWithPayPal({ product, selection, resolving }: { product: Product; se
         <>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-sm text-ink-soft">
-              Price: <span className="font-semibold text-ink">{formatPrice(best.price, "en-US")}</span>
+              Best in-stock price: <span className="font-semibold text-ink">{formatPrice(best.price, "en-US")}</span> at {best.domain}
             </p>
-            <span className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">PayPal · test mode</span>
+            <span className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">PayPal Sandbox</span>
           </div>
           <Button variant="paypal" className="mt-3 w-full" onClick={() => void pay()} loading={state.busy} disabled={resolving}>
             {state.busy ? null : <PayPalMark className="h-4 w-4" />} Pay with PayPal
           </Button>
-          <p className="mt-2 text-xs text-muted-foreground">Test money — no real charge. You’ll approve it on PayPal’s page, and the merchant ships your order.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Test money only. You’ll approve it on PayPal’s sandbox page.</p>
         </>
       ) : (
         <p className="text-sm text-ink-soft">
-          {best ? "PayPal checkout only supports USD prices." : "Out of stock, so PayPal checkout is off."}
+          {best ? "PayPal checkout only supports USD prices." : "No store has this in stock right now, so PayPal checkout is off."}
         </p>
       )}
       {state.error ? <p className="mt-2 text-sm text-red-700" role="alert">{state.error}</p> : null}

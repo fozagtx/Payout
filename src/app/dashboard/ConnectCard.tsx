@@ -48,7 +48,7 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
       />
       <CardBody className="space-y-6">
         <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your personal link for Claude</label>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your MCP connector URL</label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-line bg-cream px-3.5 py-2.5 font-mono text-sm text-ink">
               {mcpUrl === null ? (
@@ -74,10 +74,6 @@ export function ConnectCard({ mcpUrl, connected }: { mcpUrl: string | null; conn
 
         <div>
           <h3 className="mb-3 text-sm font-semibold text-ink">On claude.ai or the Claude app</h3>
-          <p className="mb-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            <AlertIcon className="mt-px h-4 w-4" />
-            <span>You need a Claude account, and custom connectors require a paid Claude plan. Everything you buy here is test mode — no real money.</span>
-          </p>
           <ol className="space-y-2.5">
             <Step n={1}>
               Open <Kbd>Settings</Kbd> → <Kbd>Connectors</Kbd>.

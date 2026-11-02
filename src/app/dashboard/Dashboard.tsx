@@ -101,7 +101,7 @@ export function Dashboard({ children }: { children: ReactNode }) {
           <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 sm:py-10">{children}</div>
         </main>
         <footer className="border-t border-line px-4 py-6 font-mono text-[11px] tracking-wide text-muted-foreground uppercase sm:px-8">
-          PayPal · test mode — no real money
+          PayPal Sandbox · no real money moves
         </footer>
       </div>
     </div>

@@ -2,43 +2,46 @@ import express, { Router, type Response } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import type { SearchFilters } from "@channel3/sdk/resources";
-import { ilike, or, and, eq, sql, desc, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { MAX_QUANTITY, OrderError, createCheckout, orderView } from "../orders.js";
 import type { Services } from "../services.js";
 import type { AppSession } from "../session.js";
-import { products } from "../schema.js";
-import { getStoreProduct, similarStoreProducts, storeProductsByChannel3Ids, toChannel3Product } from "../store/catalog.js";
 
 /**
- * The web storefront's JSON API, served from the merchant's own `products`
- * table. Channel3 still backs photo search, paste-a-link research and price
- * history for imported products — the browser never sees CHANNEL3_API_KEY.
+ * The web storefront's JSON API. The browser never sees CHANNEL3_API_KEY:
+ * these routes call Channel3 and return full SDK objects for the Channel3 UI.
  *
  *   GET  /api/shop/status                    → { search: boolean }
- *   POST /api/shop/search                    { query?, imageUrl?, base64Image?, filters? } → { products }
- *   POST /api/shop/lookup                    { url } → { product } (Channel3 research)
+ *   POST /api/shop/search                    { query?, imageUrl?, base64Image?, filters?, pageToken? } → { products, nextPageToken }
  *   GET  /api/shop/products/:id              → { product, priceHistory }
- *   POST /api/shop/products/:id/resolve      { selection } → { product }
- *   POST /api/shop/similar                   { productId, limit? } → { products }
+ *   POST /api/shop/products/:id/resolve      { selection } → { product } (variant re-fetch)
+ *   POST /api/shop/similar                   { productId, limit?, filters? } → { products }
+ *   GET  /api/shop/brands|websites|categories?q=…  → { brands | websites | categories }
+ *   GET  /api/shop/categories/:slug          → { category }
  *   POST /api/shop/checkout                  { productId, quantity?, options? } → { order } (signed in)
  */
 
 const MAX_BASE64_IMAGE = 6 * 1024 * 1024;
 
+const filters = z.record(z.string(), z.unknown()).optional();
 const options = z.record(z.string().min(1).max(100), z.string().min(1).max(200));
 
-const searchBody = z.object({
-  query: z.string().trim().max(500).optional(),
-  imageUrl: z.url({ protocol: /^https?$/ }).max(2048).optional(),
-  base64Image: z.string().max(MAX_BASE64_IMAGE).optional(),
-  filters: z.record(z.string(), z.unknown()).optional(),
-  pageToken: z.string().max(2048).optional(),
-});
+const searchBody = z
+  .object({
+    query: z.string().trim().max(500).optional(),
+    imageUrl: z.url({ protocol: /^https?$/ }).max(2048).optional(),
+    base64Image: z.string().max(MAX_BASE64_IMAGE).optional(),
+    filters,
+    pageToken: z.string().max(2048).optional(),
+  })
+  .refine((body) => Boolean(body.query || body.imageUrl || body.base64Image || body.pageToken), {
+    message: "Type something to search for, or add a photo.",
+  });
 
 const similarBody = z.object({
   productId: z.string().min(1).max(512),
   limit: z.number().int().min(1).max(24).optional(),
+  filters,
 });
 
 const resolveBody = z.object({ selection: options.optional() });
@@ -54,13 +57,22 @@ function invalid(response: Response, error: z.ZodError) {
   response.status(400).json({ error: "invalid_request", message: error.issues[0]?.message ?? "Invalid request." });
 }
 
-const escapeLike = (value: string) => value.replace(/[\\%_]/g, (char) => `\\${char}`);
-
 export function createStorefrontRouter(db: Database, session: AppSession, services: Services) {
   const router = Router();
   const limiter = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false });
+  // Mounted before the auth router's 16kb JSON parser: photo searches carry the image as base64.
   router.use("/api/shop", limiter, express.json({ limit: "8mb" }));
 
+  function store(response: Response) {
+    if (services.storefront) return services.storefront;
+    response.status(503).json({
+      error: "search_not_configured",
+      message: "Product search isn't set up on this server yet: CHANNEL3_API_KEY is missing.",
+    });
+    return undefined;
+  }
+
+  /** Channel3 failures become a short 502; details stay in the server log. */
   const handle =
     (route: (request: express.Request, response: Response) => Promise<void>) =>
     async (request: express.Request, response: Response, next: express.NextFunction) => {
@@ -73,34 +85,14 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
         }
         if (response.headersSent) return next(error);
         console.error(`${request.method} ${request.path}`, error instanceof Error ? error.message : error);
-        response.status(502).json({ error: "shop_error", message: "The shop didn't answer just now. Try again in a moment." });
+        response.status(502).json({ error: "channel3_error", message: "Channel3 didn't answer just now. Try again in a moment." });
       }
     };
 
   const userId = (request: express.Request) => session.currentUserId(request) ?? undefined;
 
-  /** Text search over the store catalog; empty query lists everything in stock. */
-  async function catalogSearch(query: string, filters?: SearchFilters) {
-    const clauses = [eq(products.inStock, true)];
-    const term = query.trim();
-    if (term) {
-      const pattern = `%${escapeLike(term)}%`;
-      const text = or(ilike(products.title, pattern), ilike(products.brand, pattern), ilike(products.description, pattern));
-      if (text) clauses.push(text);
-    }
-    const price = filters?.price as { min_price?: number; max_price?: number } | undefined;
-    if (price?.min_price !== undefined) clauses.push(sql`${products.priceCents} >= ${Math.round(price.min_price * 100)}`);
-    if (price?.max_price !== undefined) clauses.push(sql`${products.priceCents} <= ${Math.round(price.max_price * 100)}`);
-    const brandIds = (filters?.brand_ids as string[] | undefined)?.map((id) => id.toLowerCase());
-    if (brandIds?.length) clauses.push(inArray(sql`lower(${products.brand})`, brandIds));
-    const websiteIds = filters?.website_ids as string[] | undefined;
-    if (websiteIds?.length) clauses.push(inArray(products.supplierName, websiteIds));
-    return db.select().from(products).where(and(...clauses)).orderBy(desc(products.createdAt)).limit(24);
-  }
-
-  router.get("/api/shop/status", async (_request, response) => {
-    const [row] = await db.select({ count: sql<number>`count(*)` }).from(products);
-    response.json({ search: true, products: Number(row?.count ?? 0), imageSearch: Boolean(services.storefront) });
+  router.get("/api/shop/status", (_request, response) => {
+    response.json({ search: Boolean(services.storefront) });
   });
 
   router.post(
@@ -108,24 +100,19 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
     handle(async (request, response) => {
       const parsed = searchBody.safeParse(request.body ?? {});
       if (!parsed.success) return invalid(response, parsed.error);
-      const { query, imageUrl, base64Image, filters } = parsed.data;
-
-      if (imageUrl || base64Image) {
-        // Photo search: Channel3 finds the products, we keep only what this store sells.
-        if (!services.storefront) {
-          response.status(503).json({ error: "search_not_configured", message: "Photo search isn't available on this store." });
-          return;
-        }
-        const page = await services.storefront.search({ ...(query ? { query } : {}), ...(imageUrl ? { imageUrl } : {}), ...(base64Image ? { base64Image } : {}), userId: userId(request) });
-        const mine = await storeProductsByChannel3Ids(db, (page.products ?? []).map((p) => p.id));
-        response.setHeader("cache-control", "no-store");
-        response.json({ products: mine.map((row) => toChannel3Product(row)), nextPageToken: null });
-        return;
-      }
-
-      const rows = await catalogSearch(query ?? "", filters as SearchFilters | undefined);
+      const storefront = store(response);
+      if (!storefront) return;
+      const { query, imageUrl, base64Image, pageToken } = parsed.data;
+      const page = await storefront.search({
+        ...(query ? { query } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(base64Image ? { base64Image } : {}),
+        ...(pageToken ? { pageToken } : {}),
+        filters: (parsed.data.filters ?? {}) as SearchFilters,
+        userId: userId(request),
+      });
       response.setHeader("cache-control", "no-store");
-      response.json({ products: rows.map((row) => toChannel3Product(row)), nextPageToken: null });
+      response.json(page);
     })
   );
 
@@ -134,33 +121,34 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
     handle(async (request, response) => {
       const parsed = lookupBody.safeParse(request.body ?? {});
       if (!parsed.success) return invalid(response, parsed.error);
-      if (!services.storefront) {
-        response.status(503).json({ error: "search_not_configured", message: "Link lookup isn't available on this store." });
-        return;
-      }
-      const product = await services.storefront.lookup(parsed.data.url, userId(request));
+      const storefront = store(response);
+      if (!storefront) return;
+      const product = await storefront.lookup(parsed.data.url, userId(request));
       if (!product) {
-        response.status(404).json({ error: "product_not_found", message: "Couldn't find that product link in the catalog." });
+        response.status(404).json({ error: "product_not_found", message: "Channel3 couldn't find that product link in its catalog." });
         return;
       }
-      // If the store sells the same product, return our row so it stays buyable here.
-      const [mine] = await storeProductsByChannel3Ids(db, [product.id]);
       response.setHeader("cache-control", "no-store");
-      response.json({ product: mine ? toChannel3Product(mine) : { ...product, research_only: true } });
+      response.json({ product });
     })
   );
 
   router.get(
     "/api/shop/products/:id",
     handle(async (request, response) => {
-      const row = await getStoreProduct(db, String(request.params.id));
-      if (!row) {
-        response.status(404).json({ error: "product_not_found", message: "This product isn't in the store any more." });
+      const storefront = store(response);
+      if (!storefront) return;
+      const id = String(request.params.id);
+      const [product, priceHistory] = await Promise.all([
+        storefront.product(id, undefined, userId(request)),
+        storefront.priceHistory(id).catch(() => undefined),
+      ]);
+      if (!product) {
+        response.status(404).json({ error: "product_not_found", message: "Channel3 doesn't have this product any more." });
         return;
       }
-      const priceHistory = row.channel3Id && services.storefront ? await services.storefront.priceHistory(row.channel3Id).catch(() => undefined) : undefined;
       response.setHeader("cache-control", "no-store");
-      response.json({ product: toChannel3Product(row), priceHistory: priceHistory ?? null });
+      response.json({ product, priceHistory: priceHistory ?? null });
     })
   );
 
@@ -169,19 +157,15 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
     handle(async (request, response) => {
       const parsed = resolveBody.safeParse(request.body ?? {});
       if (!parsed.success) return invalid(response, parsed.error);
-      const row = await getStoreProduct(db, String(request.params.id));
-      if (!row) {
+      const storefront = store(response);
+      if (!storefront) return;
+      const product = await storefront.product(String(request.params.id), parsed.data.selection, userId(request));
+      if (!product) {
         response.status(404).json({ error: "product_not_found", message: "That option isn't available." });
         return;
       }
-      const selection = parsed.data.selection ?? {};
-      const invalidOption = Object.entries(selection).find(([name, value]) => !row.options.some((option) => option.name === name && option.values.includes(value)));
-      if (invalidOption) {
-        response.status(404).json({ error: "product_not_found", message: `We don't have ${invalidOption[1]} in ${invalidOption[0]}.` });
-        return;
-      }
       response.setHeader("cache-control", "no-store");
-      response.json({ product: toChannel3Product(row, { selected: selection }) });
+      response.json({ product });
     })
   );
 
@@ -190,38 +174,38 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
     handle(async (request, response) => {
       const parsed = similarBody.safeParse(request.body ?? {});
       if (!parsed.success) return invalid(response, parsed.error);
-      const row = await getStoreProduct(db, parsed.data.productId);
-      const products = row ? await similarStoreProducts(db, row, parsed.data.limit ?? 12) : [];
-      response.json({ products: products.map((other) => toChannel3Product(other)) });
+      const storefront = store(response);
+      if (!storefront) return;
+      const { productId, limit, filters: similarFilters } = parsed.data;
+      const products = await storefront.similar(productId, limit ?? 12, similarFilters as SearchFilters | undefined, userId(request));
+      response.json({ products });
     })
   );
 
-  /** Filter dropdowns: brands and suppliers that exist in this store's catalog. */
-  router.get("/api/shop/brands", async (request, response) => {
-    const q = typeof request.query.q === "string" ? request.query.q.trim().toLowerCase() : "";
-    const rows = await db.selectDistinct({ brand: products.brand }).from(products).where(eq(products.inStock, true));
-    const brands = rows
-      .map((row) => row.brand)
-      .filter((brand): brand is string => Boolean(brand))
-      .filter((brand) => !q || brand.toLowerCase().includes(q))
-      .map((name) => ({ id: name!.toLowerCase(), name }));
-    response.json({ brands });
-  });
+  const lookup = (kind: "brands" | "websites" | "categories") =>
+    handle(async (request, response) => {
+      const query = typeof request.query.q === "string" ? request.query.q.trim().slice(0, 100) : "";
+      const storefront = store(response);
+      if (!storefront) return;
+      response.json({ [kind]: query ? await storefront[kind](query) : [] });
+    });
+  router.get("/api/shop/brands", lookup("brands"));
+  router.get("/api/shop/websites", lookup("websites"));
+  router.get("/api/shop/categories", lookup("categories"));
 
-  router.get("/api/shop/websites", async (request, response) => {
-    const q = typeof request.query.q === "string" ? request.query.q.trim().toLowerCase() : "";
-    const rows = await db.selectDistinct({ supplier: products.supplierName }).from(products).where(eq(products.inStock, true));
-    const websites = rows
-      .map((row) => row.supplier)
-      .filter((name): name is string => Boolean(name))
-      .filter((name) => !q || name.toLowerCase().includes(q))
-      .map((name) => ({ id: name, name, domain: name }));
-    response.json({ websites });
-  });
-
-  router.get("/api/shop/categories", async (_request, response) => {
-    response.json({ categories: [] });
-  });
+  router.get(
+    "/api/shop/categories/:slug",
+    handle(async (request, response) => {
+      const storefront = store(response);
+      if (!storefront) return;
+      const category = await storefront.category(String(request.params.slug));
+      if (!category) {
+        response.status(404).json({ error: "category_not_found" });
+        return;
+      }
+      response.json({ category });
+    })
+  );
 
   router.post(
     "/api/shop/checkout",
@@ -245,6 +229,3 @@ export function createStorefrontRouter(db: Database, session: AppSession, servic
 
   return router;
 }
-
-// Keep the type used in the page-level search filters.
-export type { SearchFilters };
