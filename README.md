@@ -2,22 +2,79 @@
 
 Shop real stores from inside Claude or ChatGPT, and pay with PayPal without leaving the chat.
 
-Payout is a remote MCP server plus a web app. Anyone who signs up can add Payout's connector link to Claude or ChatGPT, the assistant can search Channel3's live product catalog, show real prices, open a PayPal checkout and refund the order later. The same search and checkout also work in the browser at `/shop`.
+- **Live app:** https://payout-xzgc.onrender.com
+- **MCP connector URL:** https://payout-xzgc.onrender.com/mcp
 
 > **Test mode:** every payment and refund goes through PayPal Sandbox. No real money is charged and no item is shipped.
 
-- **Live app:** https://payout-xzgc.onrender.com
-- **MCP connector:** https://payout-xzgc.onrender.com/mcp
+## Inspiration
 
-## How it works
+I already ask Claude what to buy. It's good at it: it knows the trade-offs between two running shoes and remembers my budget. Then it hands me ten links, and I'm back to opening tabs, comparing prices and typing my card details into a site I've never heard of. The conversation stops right where the purchase starts.
 
-1. **Sign up** on the site. There is one type of account, with no buyer or merchant roles.
-2. **Connect your AI** using the steps on the dashboard's Connect page. You can also skip this and use the web shop.
-3. **Search.** Try "Find me running shoes under $120". Results come live from Channel3. The assistant passes your budget as a price limit, and the web shop reads "under $120" straight from what you type.
-4. **Pay.** Payout checks the current Channel3 price again, then opens a PayPal Sandbox checkout for that amount.
-5. **Manage your orders.** The dashboard shows your orders, lets you refund all or part of any paid order through PayPal, and holds price alerts and analytics.
+I wanted the assistant to finish the job: find the real product, show me the real price, and let me pay in one step, with a way to get my money back if I change my mind.
 
-Channel3 is the only catalog. Payout doesn't store its own products; Postgres holds only accounts, connected apps, orders and their refunds, price alerts and webhook events.
+## What it does
+
+Payout is a connector you add to Claude or ChatGPT with one link.
+
+1. **Sign up** on the site. There's one kind of account.
+2. **Connect** by pasting the MCP link into Claude or ChatGPT and clicking **Allow**.
+3. **Ask** something like "find me running shoes under $120". The results are live products from Channel3, with real prices, sizes and colours, and the budget is applied as a real price filter.
+4. **Pay.** Payout re-checks the price with Channel3 and opens a PayPal checkout for exactly that amount.
+5. **Refund.** Your orders show up in the dashboard, and you can refund all or part of a paid order yourself, from the dashboard or by asking the assistant.
+
+If you don't use Claude or ChatGPT, the same search and checkout work in the browser at `/shop`.
+
+## How I built it
+
+- **MCP server** written with the official TypeScript SDK, so Claude, ChatGPT and Claude Code all talk to the same tools.
+- **OAuth 2.1 sign-in** with PKCE, dynamic client registration and client metadata documents. That's what lets you connect with one link and an Allow button instead of copying API keys.
+- **Channel3** for the product catalog, product details, similar items, price history and price alerts. Payout doesn't keep its own product list.
+- **PayPal Orders v2** (Sandbox) for checkout, refunds and disputes, plus PayPal webhooks so an order flips to Paid or Refunded even if you close the tab.
+- **Express + Next.js** for the API and web app, **Postgres + Drizzle** for accounts, connected apps, orders, refunds and alerts, and **Render** for hosting.
+
+## Challenges I ran into
+
+- **Getting the price right.** A price shown in chat can be stale by the time you pay. Payout fetches the price again from Channel3 when it creates the PayPal order, so you're charged what the store shows now, not what the assistant said a minute ago.
+- **OAuth for AI apps.** Claude and ChatGPT each register themselves slightly differently. Making one sign-in flow work for both took more spec reading than any other part.
+- **Deciding what the product is.** I went back and forth between a marketplace, a merchant store builder and a shopping assistant. I cut it down to one user, one catalog and one checkout, which made it much easier to explain and much harder to break.
+- **Being honest about test mode.** It's easy to make a demo look like it ships products. Payout says on every checkout and order page that it's PayPal Sandbox, no real money moves and nothing ships.
+
+## Accomplishments I'm proud of
+
+- A real purchase works end to end on the live site: a live Channel3 product, a PayPal Sandbox payment, and a refund afterwards.
+- Connecting takes one link and one click, with no API keys for the user.
+- No fake data anywhere. If Channel3 isn't configured, search says so instead of showing made-up products.
+
+## What I learned
+
+- MCP plus OAuth is enough to turn any web service into something an assistant can use safely on your behalf.
+- In a payment flow, the server has to own every number. The assistant can suggest, but the server decides the price and checks who owns the order before refunding it.
+- Cutting features made the product better.
+
+## What's next
+
+- Real (live-mode) PayPal payments once fulfilment is solved, either through store partnerships or affiliate checkout.
+- Shipping and delivery tracking in the chat.
+- Live price-drop alerts delivered straight into the conversation.
+
+## Built with
+
+| Tool | What it does in Payout |
+| --- | --- |
+| [Channel3](https://trychannel3.com) | Every product, price, size, colour, similar item and price alert. |
+| [PayPal](https://developer.paypal.com) (Sandbox) | Checkout, refunds, disputes and payment webhooks. |
+| [Model Context Protocol](https://modelcontextprotocol.io) | The connector that Claude, ChatGPT and Claude Code use. |
+| Claude / ChatGPT | Where you shop: both connect through the same MCP link. |
+| [AG Studio](https://www.npmjs.com/package/ag-studio) | Charts on the Analytics page, built from your real orders. |
+| Svix | Verifies Channel3 webhook signatures for price alerts. |
+| Render | Hosts the app and its Postgres database. |
+
+TypeScript, Node.js, Express, Next.js, React, Tailwind CSS, Postgres, Drizzle ORM.
+
+---
+
+# Technical details
 
 ## Connect Claude or ChatGPT
 
