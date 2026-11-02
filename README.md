@@ -1,6 +1,9 @@
 # Payout
 
-Shop real stores from inside Claude or ChatGPT, and pay with PayPal without leaving the chat.
+**Shop real stores from inside Claude or ChatGPT: search live Channel3 products, pay with PayPal Sandbox, and refund your own orders without leaving the chat.**
+
+| [Live app](https://payout-xzgc.onrender.com) · [Inspiration](#inspiration) · [What it does](#what-it-does) · [How I built it](#how-i-built-it) · [Challenges](#challenges-i-ran-into) · [Accomplishments](#accomplishments-im-proud-of) · [What I learned](#what-i-learned) · [What's next](#whats-next) · [Built with](#built-with) · [Connect Claude or ChatGPT](#connect-claude-or-chatgpt) · [Architecture](#architecture) · [MCP tools](#mcp-tools) · [Configuration](#configuration) · [Run locally](#run-locally) · [Deploy on Render](#deploy-on-render) · [Checks](#checks) · [License](#license) |
+| --- |
 
 - **Live app:** https://payout-xzgc.onrender.com
 - **MCP connector URL:** https://payout-xzgc.onrender.com/mcp
@@ -66,7 +69,7 @@ If you don't use Claude or ChatGPT, the same search and checkout work in the bro
 | [PayPal](https://developer.paypal.com) (Sandbox) | Checkout, refunds, disputes and payment webhooks. |
 | [Model Context Protocol](https://modelcontextprotocol.io) | The connector that Claude, ChatGPT and Claude Code use. |
 | Claude / ChatGPT | Where you shop: both connect through the same MCP link. |
-| [AG Studio](https://www.npmjs.com/package/ag-studio) | Charts on the Analytics page, built from your real orders. |
+| [AG Studio](https://www.npmjs.com/package/ag-studio) | By AG Grid. The Analytics page: live totals, charts and a sortable orders table built from your real orders, refunds and price watches, with an editable dashboard. |
 | Svix | Verifies Channel3 webhook signatures for price alerts. |
 | Render | Hosts the app and its Postgres database. |
 
